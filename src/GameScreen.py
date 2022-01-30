@@ -15,5 +15,5 @@ class GameScreen(ABC):
         pass
 
     @abstractmethod
-    def dispose(self):
+    def unbind(self):
         pass

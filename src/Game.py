@@ -1,22 +1,29 @@
 from time import time
 import pyglet
+import glooey
 
 
 class Game:
     def __init__(self, screen, updates_per_second):
         self._updates_per_second = updates_per_second
         self._last_time = time()
-        self._window = pyglet.window.Window(resizable=True, caption="Golf Adventure")
-        self._window.set_minimum_size(640, 480)
+        self.window = pyglet.window.Window(resizable=True, caption="Golf Adventure")
+        self.window.set_minimum_size(640, 480)
+        self.gui = glooey.Gui(self.window)
         self._screen = screen
         self._screen.bind(self)
 
     def run(self):
-        @self._window.event
         def on_draw():
             self.update()
             self.render()
 
+        def on_key_press(symbol, _modifiers):
+            if symbol == pyglet.window.key.ESCAPE:
+                return True
+
+        self.window.push_handlers(on_draw)
+        self.window.push_handlers(on_key_press)
         pyglet.app.run()
 
     def update(self):
@@ -30,13 +37,11 @@ class Game:
     def render(self):
         self._screen.render()
 
-    def clear_window(self):
-        self._window.clear()
-
-    def get_window_dimensions(self):
-        return (self._window.width, self._window.height)
-
     def set_screen(self, screen):
-        self._screen.dispose()
+        self._screen.unbind()
         self._screen = screen
         self._screen.bind(self)
+
+    def quit(self):
+        self._screen.unbind()
+        self.window.close()
