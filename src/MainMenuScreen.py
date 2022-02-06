@@ -44,6 +44,7 @@ class MainMenuScreen(GameScreen):
     def __init__(self):
         self._game = None
         self._vbox = None
+        self._white_background = None
 
     def bind(self, game):
         self._game = game
@@ -60,7 +61,8 @@ class MainMenuScreen(GameScreen):
         def on_quit_button_click(_widget):
             self._game.quit()
 
-        self._game.gui.add(WhiteBackground())
+        self._white_background = WhiteBackground()
+        self._game.gui.add(self._white_background)
         self._vbox = NavigationContainer()
         play_levels_button = NavigationButton("Play Levels")
         play_levels_button.set_handler("on_click", on_play_levels_button_click)
@@ -84,5 +86,6 @@ class MainMenuScreen(GameScreen):
 
     def unbind(self):
         self._game.gui.remove(self._vbox)
+        self._game.gui.remove(self._white_background)
         self._game = None
         self._vbox = None

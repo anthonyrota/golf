@@ -87,8 +87,8 @@ def make_cave(width, height):
         for i, c1 in enumerate(polygon):
             c2 = polygon[(i + 1) % len(polygon)]
             double_signed_area += (c2[0] - c1[0]) * (c2[1] + c1[1])
-        if double_signed_area < 0:
-            polygon.reverse()  # make clockwise
+        if double_signed_area > 0:
+            polygon.reverse()  # make counter-clockwise
 
     return polygons
 
@@ -99,9 +99,9 @@ def _make_grid(
 ):
     wall_chance = 40
     min_surrounding_walls = 5
-    iterations = 10
+    iterations = 5
     pillar_iterations = 5
-    min_open_percent = 0.3
+    min_open_percent = 0.25
 
     def do_cellular_automata(grid, make_pillars):
         updated_grid = [row[:] for row in grid]

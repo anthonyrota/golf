@@ -1,5 +1,6 @@
 from time import time
 import pyglet
+import pyglet.gl
 import glooey
 
 
@@ -7,9 +8,13 @@ class Game:
     def __init__(self, screen, updates_per_second):
         self._updates_per_second = updates_per_second
         self._last_time = time()
-        self.window = pyglet.window.Window(resizable=True, caption="Golf Adventure")
+        self.window = pyglet.window.Window(
+            config=pyglet.gl.Config(double_buffer=True, sample_buffers=1, samples=8),
+            resizable=True,
+            caption="Golf Adventure",
+        )
         self.window.set_minimum_size(640, 480)
-        self.gui = glooey.Gui(self.window)
+        self.gui = glooey.Gui(self.window, clear_before_draw=False)
         self._screen = screen
         self._screen.bind(self)
 
