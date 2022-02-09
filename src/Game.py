@@ -19,27 +19,21 @@ class Game:
         self._screen.bind(self)
 
     def run(self):
-        def on_draw():
-            self.update()
-            self.render()
-
         def on_key_press(symbol, _modifiers):
             if symbol == pyglet.window.key.ESCAPE:
                 return True
 
-        self.window.push_handlers(on_draw)
         self.window.push_handlers(on_key_press)
+        pyglet.clock.schedule_interval(self._tick, 1 / self._updates_per_second)
         pyglet.app.run()
 
-    def update(self):
+    def _tick(self, _):
         cur_time = time()
         num_updates = int((cur_time - self._last_time) * self._updates_per_second)
         self._last_time += num_updates / self._updates_per_second
         dt = 1 / self._updates_per_second
         for _ in range(num_updates):
             self._screen.update(dt)
-
-    def render(self):
         self._screen.render()
 
     def set_screen(self, screen):

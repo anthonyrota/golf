@@ -9,6 +9,8 @@ from shapely.geometry import (
     MultiPolygon,
     LinearRing,
 )
+from Rectangle import Rectangle
+from Camera import Camera
 from GameScreen import GameScreen
 from cave_gen import make_cave
 
@@ -173,23 +175,17 @@ class PlayInfiniteScreen(GameScreen):
             (66, 61, 54),
         ]
         self._indexed_vertices = None
+        self._camera = None
+        self._exterior_rect = None
 
     def bind(self, game):
         self._game = game
+        self._camera = Camera(self._game)
 
         N = [2, 5]
         bounds_buff = max(N) + 1
-
         tess = Tessellator()
-
         contours = make_cave(60, 60)
-
-        scale = 10  # temp
-        contours = [
-            [(c[0] * scale, c[1] * scale) for c in contour] for contour in contours
-        ]  # temp
-        N = [r * scale for r in N]  # temp
-        bounds_buff = (bounds_buff - 1) * scale + 1  # temp
 
         # pylint: disable-next=no-member
         exterior = list(Polygon(contours[0]).envelope.exterior.coords)[:-1]
@@ -209,15 +205,15 @@ class PlayInfiniteScreen(GameScreen):
 
         buffs = [[]]
         for contour in contours:  # TODO: find a better way to do this
-            shape = (
-                Polygon(contour)
-                .buffer(1 * scale)  # temp
-                .buffer(-2 * scale)  # temp
-                .buffer(1 * scale)  # temp
-            )
-            assert isinstance(shape, Polygon)
-            # pylint: disable-next=no-member
-            buffs[0].append(shape.exterior.coords)
+            shape = Polygon(contour).buffer(1).buffer(-2).buffer(1)
+            if isinstance(shape, Polygon):
+                buffs[0].append(shape.exterior.coords)
+            else:  # TODO: why?
+                assert isinstance(shape, MultiPolygon)
+                # pylint: disable-next=no-member
+                for poly in shape.geoms:
+                    assert isinstance(poly, Polygon)
+                    buffs[0].append(poly.exterior.coords)
         for r in N:
             buff_contours = []
             shape = LinearRing(reversed(contours[0])).parallel_offset(r, side="left")
@@ -242,22 +238,20 @@ class PlayInfiniteScreen(GameScreen):
                         buff_contours.append(poly.exterior.coords)
             buffs.append(buff_contours)
 
+        self._exterior_rect = Rectangle(
+            0,
+            0,
+            exterior[2][0] - exterior[0][0] + 2 * bounds_buff,
+            exterior[2][1] - exterior[0][1] + 2 * bounds_buff,
+        )
+
         buff_tess_contours = [
             [
                 [
-                    (0, 0),
-                    (
-                        exterior[1][0] - exterior[0][0] + 2 * bounds_buff,
-                        exterior[1][1] - exterior[0][1],
-                    ),
-                    (
-                        exterior[2][0] - exterior[0][0] + 2 * bounds_buff,
-                        exterior[2][1] - exterior[0][1] + 2 * bounds_buff,
-                    ),
-                    (
-                        exterior[3][0] - exterior[0][0],
-                        exterior[3][1] - exterior[0][1] + 2 * bounds_buff,
-                    ),
+                    (self._exterior_rect.x, self._exterior_rect.y),
+                    (self._exterior_rect.width, self._exterior_rect.y),
+                    (self._exterior_rect.width, self._exterior_rect.height),
+                    (self._exterior_rect.x, self._exterior_rect.height),
                 ]
             ]
             + buffs[-1]
@@ -265,7 +259,7 @@ class PlayInfiniteScreen(GameScreen):
 
         ground_vertices = []
         ground_indices = []
-        s = 1 * scale  # temp
+        h = 1
         for i, contour in enumerate(buffs[0]):
             is_prev_ground = False
             for j, c1 in enumerate(contour):
@@ -274,8 +268,8 @@ class PlayInfiniteScreen(GameScreen):
                 if l <= 0:
                     is_prev_ground = False
                     continue
-                c1h = (c1[0], c1[1] + s)
-                c2h = (c2[0], c2[1] + s)
+                c1h = (c1[0], c1[1] + h)
+                c2h = (c2[0], c2[1] + h)
                 if not is_prev_ground:
                     ground_vertices.append(c1[0])
                     ground_vertices.append(c1[1])
@@ -319,6 +313,14 @@ class PlayInfiniteScreen(GameScreen):
 
         gl.glEnableClientState(gl.GL_VERTEX_ARRAY)
 
+        self._camera.width = max(
+            self._exterior_rect.width,
+            self._exterior_rect.height
+            * (self._game.window.width / self._game.window.height),
+        )
+
+        self._camera.transform_gl()
+
         for (r, g, b), buffs in zip(
             chain([self._colors[0], self._colors[-1]], self._colors[1:-1]),
             self._indexed_vertices,
@@ -328,6 +330,21 @@ class PlayInfiniteScreen(GameScreen):
             gl.glVertexPointer(2, gl.GL_DOUBLE, 0, 0)
             gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, buffs.index_buffer)
             gl.glDrawElements(gl.GL_TRIANGLES, buffs.num_indices, gl.GL_UNSIGNED_INT, 0)
+
+        for wall_rect in self._camera.get_view_rect().subtract(self._exterior_rect):
+            gl.glColor3d(
+                self._colors[-1][0] / 255,
+                self._colors[-1][1] / 255,
+                self._colors[-1][2] / 255,
+            )
+            gl.glRectd(
+                wall_rect.x,
+                wall_rect.y,
+                wall_rect.right,
+                wall_rect.top,
+            )
+
+        self._camera.undo_transform_gl()
 
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
 
@@ -340,3 +357,5 @@ class PlayInfiniteScreen(GameScreen):
             gl.glDeleteBuffers(1, ctypes.pointer(buffs.vertex_buffer))
             gl.glDeleteBuffers(1, ctypes.pointer(buffs.index_buffer))
         self._indexed_vertices = None
+        self._camera = None
+        self._exterior_rect = None
