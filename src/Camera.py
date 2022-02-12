@@ -1,12 +1,12 @@
 from pyglet import gl
-from Vector2 import Vector2
+from pyglet.math import Vec2
 from Rectangle import Rectangle
 
 
 class Camera:
     def __init__(self, game):
         self._game = game
-        self.position = Vector2.zero()
+        self.position = Vec2()
         self.width = self._game.window.width
 
     def transform_gl(self):
@@ -21,8 +21,7 @@ class Camera:
 
     def get_view_rect(self):
         return Rectangle(
-            self.position.x,
-            self.position.y,
+            self.position,
             self.width,
             self.width * (self._game.window.height / self._game.window.width),
         )

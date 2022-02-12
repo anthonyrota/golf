@@ -1,23 +1,25 @@
+from pyglet.math import Vec2
+
+
 class Rectangle:
-    def __init__(self, x, y, width, height):
-        self.x = x
-        self.y = y
+    def __init__(self, pos, width, height):
+        self.pos = pos
         self.width = width
         self.height = height
-        self.right = self.x + self.width
-        self.top = self.y + self.height
+        self.right = self.pos.x + self.width
+        self.top = self.pos.y + self.height
 
     def intersects(self, other):
         return (
-            self.y < other.top
-            and other.y < self.top
-            and self.x < other.right
-            and other.x < self.right
+            self.pos.y < other.top
+            and other.pos.y < self.top
+            and self.pos.x < other.right
+            and other.pos.x < self.right
         )
 
     def subtract(self, hole):
         if not self.intersects(hole):
-            yield Rectangle(self.x, self.y, self.width, self.height)
+            yield Rectangle(self.pos, self.width, self.height)
             return
 
         # -------------------------
@@ -29,16 +31,17 @@ class Rectangle:
         # -------------------------
 
         if self.top > hole.top:  # A
-            yield Rectangle(self.x, hole.top, self.width, self.top - hole.top)
+            yield Rectangle(Vec2(self.pos.x, hole.top), self.width, self.top - hole.top)
 
         if self.right > hole.right:  # B
-            yield Rectangle(hole.right, hole.y, self.right - hole.right, hole.height)
+            yield Rectangle(
+                Vec2(hole.right, hole.pos.y), self.right - hole.right, hole.height
+            )
 
-        if hole.y > self.y:  # C
-            yield Rectangle(self.x, self.y, self.width, hole.y - self.y)
+        if hole.pos.y > self.pos.y:  # C
+            yield Rectangle(self.pos, self.width, hole.pos.y - self.pos.y)
 
-        if hole.x > self.x:  # D
-            yield Rectangle(self.x, hole.y, hole.x - self.x, hole.height)
-
-    def __str__(self):
-        return f"Rectangle({self.x},{self.y},{self.width},{self.height})"
+        if hole.pos.x > self.pos.x:  # D
+            yield Rectangle(
+                Vec2(self.pos.x, hole.pos.y), hole.pos.x - self.pos.x, hole.height
+            )
