@@ -30,26 +30,45 @@ class LevelGeometry:
         self,
         contours,
         exterior_contour,
+        start_flat,
+        flag_flat,
         platform_buffers,
         pseudo_3d_ground_height,
         pseudo_3d_ground_color,
         unbuffed_platform_color,
     ):
         self._is_closed_in = exterior_contour is not None
-        self._pseudo_3d_ground_height = pseudo_3d_ground_height
         self._pseudo_3d_ground_color = pseudo_3d_ground_color
         self._unbuffed_platform_color = unbuffed_platform_color
         self._exterior_rect = None
         self._pseudo_3d_ground_indexed_vertices = None
         self._unbuffed_platform_indexed_vertices = None
         self._buffed_platform_indexed_vertices = None
-        self._make_static_geometry(contours, exterior_contour, platform_buffers)
+        self._start_flat_indexed_vertices = None
+        self._flag_flat_indexed_vertices = None
+        self._make_static_geometry(
+            contours=contours,
+            exterior_contour=exterior_contour,
+            pseudo_3d_ground_height=pseudo_3d_ground_height,
+            start_flat=start_flat,
+            flag_flat=flag_flat,
+            platform_buffers=platform_buffers,
+        )
 
     @property
     def frame(self):
         return self._exterior_rect
 
-    def _make_static_geometry(self, contours, exterior_contour, platform_buffers):
+    def _make_static_geometry(
+        self,
+        contours,
+        exterior_contour,
+        pseudo_3d_ground_height,
+        start_flat,
+        flag_flat,
+        platform_buffers,
+    ):
+
         bounds_buff = (
             max(buff.distance for buff in platform_buffers) + 1
             if exterior_contour
@@ -68,32 +87,40 @@ class LevelGeometry:
         exterior_bottom_left = (exterior[0][0], exterior[0][1])
         exterior_top_right = (exterior[2][0], exterior[2][1])
 
+        def adjust_point(point):
+            # shapely throws an error and I don't know why, but adding a
+            # small random number fixes it.
+            return (
+                point[0] - exterior_bottom_left[0] + bounds_buff + random() / 100,
+                point[1] - exterior_bottom_left[1] + bounds_buff + random() / 100,
+            )
+
         contours = [
-            [
-                (
-                    # shapely throws an error and I don't know why, but adding a
-                    # small random number fixes it.
-                    c[0] - exterior_bottom_left[0] + bounds_buff + random() / 100,
-                    c[1] - exterior_bottom_left[1] + bounds_buff + random() / 100,
-                )
-                for c in contour
-            ]
+            [adjust_point(c) for c in contour]
             for contour in (
                 [exterior_contour] + contours if exterior_contour else contours
             )
         ]
 
-        buffs = [[]]
-        for contour in contours:  # TODO: find a better way to do this
-            shape = Polygon(contour).buffer(1).buffer(-2).buffer(1)
+        # TODO: find a better way to do this
+        def round_contour(contour, r):
+            shape = Polygon(contour).buffer(r).buffer(-2 * r).buffer(r)
             if isinstance(shape, Polygon):
-                buffs[0].append(shape.exterior.coords)
+                yield list(shape.exterior.coords)
             else:  # TODO: why?
                 assert isinstance(shape, MultiPolygon)
                 # pylint: disable-next=no-member
                 for poly in shape.geoms:
                     assert isinstance(poly, Polygon)
-                    buffs[0].append(poly.exterior.coords)
+                    yield list(poly.exterior.coords)
+
+        buffs = [
+            [
+                rounded_contour
+                for contour in contours
+                for rounded_contour in round_contour(contour, 1)
+            ]
+        ]
         for buff in platform_buffers:
             r = buff.distance
             buff_contours = []
@@ -128,7 +155,7 @@ class LevelGeometry:
             exterior_top_right[1]
             - exterior_bottom_left[1]
             + 2 * bounds_buff
-            + (0 if exterior_contour else self._pseudo_3d_ground_height),
+            + (0 if exterior_contour else pseudo_3d_ground_height),
         )
 
         ground_vertices = []
@@ -141,8 +168,8 @@ class LevelGeometry:
                 if l <= 0:
                     is_prev_ground = False
                     continue
-                c1h = (c1[0], c1[1] + self._pseudo_3d_ground_height)
-                c2h = (c2[0], c2[1] + self._pseudo_3d_ground_height)
+                c1h = (c1[0], c1[1] + pseudo_3d_ground_height)
+                c2h = (c2[0], c2[1] + pseudo_3d_ground_height)
                 if not is_prev_ground:
                     ground_vertices.append(c1[0])
                     ground_vertices.append(c1[1])
@@ -194,12 +221,45 @@ class LevelGeometry:
             for i, buff in enumerate(platform_buffers)
         ]
 
+        def make_rounded_rectangle_indexed_vertices(rect):
+            rounded_rect_contour = next(
+                round_contour(
+                    [
+                        (rect.pos[0], rect.pos[1]),
+                        (rect.pos[0] + rect.width, rect.pos[1]),
+                        (rect.pos[0] + rect.width, rect.pos[1] + rect.height),
+                        (rect.pos[0], rect.pos[1] + rect.height),
+                    ],
+                    min(rect.width, rect.height) / 4,
+                )
+            )
+            return tess.make_indexed_vertices_from_contours([rounded_rect_contour])
+
+        start_flat_pos = adjust_point(start_flat.pos)
+        self._start_flat_indexed_vertices = make_rounded_rectangle_indexed_vertices(
+            Rectangle(
+                Vec2(start_flat_pos[0], start_flat_pos[1]),
+                start_flat.width,
+                pseudo_3d_ground_height,
+            )
+        )
+        flag_flat_pos = adjust_point(flag_flat.pos)
+        self._flag_flat_indexed_vertices = make_rounded_rectangle_indexed_vertices(
+            Rectangle(
+                Vec2(flag_flat_pos[0], flag_flat_pos[1]),
+                flag_flat.width,
+                pseudo_3d_ground_height,
+            )
+        )
+
         tess.dispose()
 
     def render(self, camera):
         self._pseudo_3d_ground_indexed_vertices.render_in_single_color(
             self._pseudo_3d_ground_color
         )
+        self._start_flat_indexed_vertices.render_in_single_color((0, 0, 255))
+        self._flag_flat_indexed_vertices.render_in_single_color((255, 0, 0))
         self._unbuffed_platform_indexed_vertices.render_in_single_color(
             self._unbuffed_platform_color
         )
@@ -215,21 +275,16 @@ class LevelGeometry:
                 )
 
     def dispose(self):
-        gl.glDeleteBuffers(
-            1, ctypes.pointer(self._pseudo_3d_ground_indexed_vertices.vertex_buffer)
-        )
-        gl.glDeleteBuffers(
-            1, ctypes.pointer(self._pseudo_3d_ground_indexed_vertices.index_buffer)
-        )
+        self._pseudo_3d_ground_indexed_vertices.dispose()
         self._pseudo_3d_ground_indexed_vertices = None
-        gl.glDeleteBuffers(
-            1, ctypes.pointer(self._unbuffed_platform_indexed_vertices.vertex_buffer)
-        )
-        gl.glDeleteBuffers(
-            1, ctypes.pointer(self._unbuffed_platform_indexed_vertices.index_buffer)
-        )
+        self._unbuffed_platform_indexed_vertices.dispose()
         self._unbuffed_platform_indexed_vertices = None
         for (_, indexed_vertices) in self._buffed_platform_indexed_vertices:
-            gl.glDeleteBuffers(1, ctypes.pointer(indexed_vertices.vertex_buffer))
-            gl.glDeleteBuffers(1, ctypes.pointer(indexed_vertices.index_buffer))
+            indexed_vertices.dispose()
         self._buffed_platform_indexed_vertices = None
+        self._unbuffed_platform_indexed_vertices.dispose()
+        self._unbuffed_platform_indexed_vertices = None
+        self._start_flat_indexed_vertices.dispose()
+        self._start_flat_indexed_vertices = None
+        self._flag_flat_indexed_vertices.dispose()
+        self._flag_flat_indexed_vertices = None

@@ -1,9 +1,9 @@
 from random import randint
 from collections import deque
+from pyglet.math import Vec2
 
 
-def make_cave(width, height):
-    grid = _make_grid(width, height)
+def make_cave_contours(grid, width, height):
     edges = {}
 
     def add_edge(x, y, p1, p2):
@@ -93,7 +93,123 @@ def make_cave(width, height):
     return polygons
 
 
-def _make_grid(
+class Flat:
+    def __init__(self, pos, width):
+        self.pos = pos
+        self.width = width
+
+    def extend(self, x):
+        if x < self.pos.x:
+            return Flat(Vec2(x, self.pos.y), (self.pos.x + self.width) - x)
+        if x > self.pos.x + self.width:
+            return Flat(self.pos, x - self.pos.x)
+        return self
+
+    def buffer(self, amount):
+        return Flat(Vec2(self.pos.x - amount, self.pos.y), self.width + 2 * amount)
+
+    def middle(self):
+        return Vec2(self.pos.x + self.width / 2, self.pos.y)
+
+
+def _get_flat_grounds(contours):
+    flats = []
+    for i, contour in enumerate(contours):
+        is_prev_flat = False
+        for j, c1 in enumerate(contour):
+            c2 = contour[(j + 1) % len(contour)]
+            if c1[1] != c2[1]:
+                is_prev_flat = False
+                continue
+            l = c1[0] - c2[0] if i == 0 else c2[0] - c1[0]
+            if l >= 0:
+                is_prev_flat = False
+                continue
+            if is_prev_flat:
+                flats[-1] = flats[-1].extend(c2[0])
+            else:
+                flats.append(
+                    Flat(pos=Vec2(min(c1[0], c2[0]), c1[1]), width=abs(c2[0] - c1[0]))
+                )
+            is_prev_flat = True
+    return flats
+
+
+# https://github.com/bsharvari/A-Star-Search
+def min_path_length(grid, start, end):
+    path = []
+    val = 1
+
+    visited = [[0 for _ in range(len(grid[0]))] for _ in range(len(grid))]
+    visited[start[0]][start[1]] = 1
+
+    heuristic = lambda y, x: abs(end[0] - x) + abs(end[1] - y)
+
+    x = start[0]
+    y = start[1]
+    g = 0
+    f = g + heuristic(x, y)
+
+    minList = [f, g, x, y]
+
+    delta = [[-1, 0], [0, -1], [1, 0], [0, 1]]
+
+    while minList[2:] != end:
+        # pylint: disable-next=consider-using-enumerate
+        for i in range(len(delta)):
+            x2 = x + delta[i][0]
+            y2 = y + delta[i][1]
+            if 0 <= x2 < len(grid) and 0 <= y2 < len(grid[0]):
+                if visited[x2][y2] == 0 and grid[x2][y2] == 0:
+                    g2 = g + 1
+                    f2 = g2 + heuristic(x2, y2)
+                    path.append([f2, g2, x2, y2])
+                    visited[x2][y2] = 1
+
+        if not path:
+            raise Exception("No path")
+
+        del minList[:]
+        minList = min(path)
+        path.remove(minList)
+        x = minList[2]
+        y = minList[3]
+        g = minList[1]
+        val += 1
+
+    return minList[1]
+
+
+def place_start_flat_and_flag_flat(contours, grid, min_flat_width, flat_edge_buffer):
+    flat_grounds = [
+        flat.buffer(-flat_edge_buffer)
+        for flat in _get_flat_grounds(contours)
+        if flat.width >= min_flat_width + 2 * flat_edge_buffer
+    ]
+
+    def flat_to_grid_coords(flat):
+        mid = flat.middle()
+        return [int(mid.y / 2) + 1, int(mid.x / 2)]
+
+    def get_score(start_flat, flag_flat):
+        return flag_flat.width + min_path_length(
+            grid, flat_to_grid_coords(start_flat), flat_to_grid_coords(flag_flat)
+        )
+
+    i, j, _ = max(
+        (
+            (i, j, get_score(a, b))
+            for i, a in enumerate(flat_grounds)
+            for j, b in enumerate(flat_grounds)
+            if i != j
+        ),
+        key=lambda t: t[2],
+    )
+
+    return flat_grounds[i], flat_grounds[j]
+
+
+def make_cave_grid(
     width,
     height,
 ):
@@ -101,7 +217,7 @@ def _make_grid(
     min_surrounding_walls = 5
     iterations = 5
     pillar_iterations = 5
-    min_open_percent = 0.25
+    min_open_percent = 0.3
 
     def do_cellular_automata(grid, make_pillars):
         updated_grid = [row[:] for row in grid]

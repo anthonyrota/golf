@@ -16,6 +16,10 @@ class IndexedVertices:
         gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, self.index_buffer)
         gl.glDrawElements(gl.GL_TRIANGLES, self.num_indices, gl.GL_UNSIGNED_INT, 0)
 
+    def dispose(self):
+        gl.glDeleteBuffers(1, ctypes.pointer(self.vertex_buffer))
+        gl.glDeleteBuffers(1, ctypes.pointer(self.index_buffer))
+
 
 def make_indexed_vertices(vertices, indices):
     num_indices = len(indices)
