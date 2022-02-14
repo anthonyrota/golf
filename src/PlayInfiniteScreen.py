@@ -16,9 +16,7 @@ class PlayInfiniteScreen(GameScreen):
         width, height = 45, 45
         cave_grid = make_cave_grid(width, height)
         cave_contours = make_cave_contours(cave_grid, width, height)
-        start_flat, flag_flat = place_start_flat_and_flag_flat(
-            cave_contours, cave_grid, 2, 0.5
-        )
+        start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
         self._geometry = LevelGeometry(
             contours=cave_contours[1:],
             exterior_contour=cave_contours[0],

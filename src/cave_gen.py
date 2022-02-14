@@ -136,14 +136,14 @@ def _get_flat_grounds(contours):
 
 
 # https://github.com/bsharvari/A-Star-Search
-def min_path_length(grid, start, end):
+def _min_path_length(grid, start, end):
     path = []
     val = 1
 
     visited = [[0 for _ in range(len(grid[0]))] for _ in range(len(grid))]
     visited[start[0]][start[1]] = 1
 
-    heuristic = lambda y, x: abs(end[0] - x) + abs(end[1] - y)
+    heuristic = lambda x, y: abs(end[0] - x) + abs(end[1] - y)
 
     x = start[0]
     y = start[1]
@@ -180,19 +180,15 @@ def min_path_length(grid, start, end):
     return minList[1]
 
 
-def place_start_flat_and_flag_flat(contours, grid, min_flat_width, flat_edge_buffer):
-    flat_grounds = [
-        flat.buffer(-flat_edge_buffer)
-        for flat in _get_flat_grounds(contours)
-        if flat.width >= min_flat_width + 2 * flat_edge_buffer
-    ]
+def place_start_flat_and_flag_flat(contours, grid):
+    flat_grounds = [flat.buffer(-0.25) for flat in _get_flat_grounds(contours)]
 
     def flat_to_grid_coords(flat):
         mid = flat.middle()
         return [int(mid.y / 2) + 1, int(mid.x / 2)]
 
     def get_score(start_flat, flag_flat):
-        return flag_flat.width + min_path_length(
+        return flag_flat.width + _min_path_length(
             grid, flat_to_grid_coords(start_flat), flat_to_grid_coords(flag_flat)
         )
 
