@@ -1,6 +1,5 @@
 from random import random
-import ctypes
-from pyglet import gl
+import math
 from pyglet.math import Vec2
 from shapely.geometry import (
     LineString,
@@ -9,9 +8,60 @@ from shapely.geometry import (
     MultiPolygon,
     LinearRing,
 )
+from pyshaders import from_string
 from Rectangle import Rectangle
 from Tessellator import Tessellator
-from IndexedVertices import make_indexed_vertices
+from IndexedVertices import IndexedVertices
+
+
+single_color_shader = from_string(
+    [
+        """attribute vec2 a_vertex_position;
+uniform mat4 u_view_matrix;
+
+void main() {
+    gl_Position = u_view_matrix * vec4(a_vertex_position, 0.0, 1.0);
+}"""
+    ],
+    [
+        """uniform vec3 u_color;
+
+void main() {
+    gl_FragColor = vec4(u_color, 1.0);
+}"""
+    ],
+)
+
+
+stripe_shader = from_string(
+    [
+        """attribute vec2 a_vertex_position;
+uniform mat4 u_view_matrix;
+varying vec2 v_vertex_position;
+
+void main() {
+    v_vertex_position = a_vertex_position;
+    gl_Position = u_view_matrix * vec4(a_vertex_position, 0.0, 1.0);
+}"""
+    ],
+    [
+        """uniform vec3 u_line;
+uniform vec3 u_background_color;
+uniform vec3 u_stripe_color;
+uniform float u_background_width;
+uniform float u_stripe_width;
+varying vec2 v_vertex_position;
+
+void main() {
+    float distance_to_line = abs(u_line.x * v_vertex_position.x + u_line.y * v_vertex_position.y + u_line.z);
+    if (mod(distance_to_line, u_background_width + u_stripe_width) < u_stripe_width) {
+        gl_FragColor = vec4(u_stripe_color, 1.0);
+    } else {
+        gl_FragColor = vec4(u_background_color, 1.0);
+    }
+}"""
+    ],
+)
 
 
 class PlatformBuffer:
@@ -25,6 +75,10 @@ class ColoredPlatformBuffer(PlatformBuffer):
         self.color = color
 
 
+def normalize_color(color):
+    return (color[0] / 255, color[1] / 255, color[2] / 255)
+
+
 class LevelGeometry:
     def __init__(
         self,
@@ -32,12 +86,22 @@ class LevelGeometry:
         exterior_contour,
         start_flat,
         flag_flat,
+        flag_ground_background_color,
+        flag_ground_stripe_color,
+        flag_ground_background_width,
+        flag_ground_stripe_width,
+        flag_ground_stripe_angle,
         platform_buffers,
         pseudo_3d_ground_height,
         pseudo_3d_ground_color,
         unbuffed_platform_color,
     ):
         self._is_closed_in = exterior_contour is not None
+        self._flag_ground_background_color = flag_ground_background_color
+        self._flag_ground_stripe_color = flag_ground_stripe_color
+        self._flag_ground_background_width = flag_ground_background_width
+        self._flag_ground_stripe_width = flag_ground_stripe_width
+        self._flag_ground_stripe_angle = flag_ground_stripe_angle
         self._pseudo_3d_ground_color = pseudo_3d_ground_color
         self._unbuffed_platform_color = unbuffed_platform_color
         self._exterior_rect = None
@@ -46,6 +110,7 @@ class LevelGeometry:
         self._buffed_platform_indexed_vertices = None
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices = None
+        self._dynamic_wall_indexed_vertices = None
         self._make_static_geometry(
             contours=contours,
             exterior_contour=exterior_contour,
@@ -198,9 +263,10 @@ class LevelGeometry:
                 ground_indices.append(d)
                 is_prev_ground = True
 
-        self._pseudo_3d_ground_indexed_vertices = make_indexed_vertices(
-            ground_vertices, ground_indices
+        self._pseudo_3d_ground_indexed_vertices = (
+            IndexedVertices.from_vertices_and_indices(ground_vertices, ground_indices)
         )
+
         self._unbuffed_platform_indexed_vertices = (
             tess.make_indexed_vertices_from_contours(
                 [
@@ -213,11 +279,14 @@ class LevelGeometry:
                 ]
                 + buffs[-1]
                 if exterior_contour
-                else buffs[-1]
+                else buffs[-1],
             )
         )
         self._buffed_platform_indexed_vertices = [
-            (buff, tess.make_indexed_vertices_from_contours(buffs[i] + buffs[i + 1]))
+            (
+                buff,
+                tess.make_indexed_vertices_from_contours(buffs[i] + buffs[i + 1]),
+            )
             for i, buff in enumerate(platform_buffers)
         ]
 
@@ -241,7 +310,7 @@ class LevelGeometry:
                 Vec2(start_flat_pos[0], start_flat_pos[1]),
                 start_flat.width,
                 pseudo_3d_ground_height,
-            )
+            ),
         )
         flag_flat_pos = adjust_point(flag_flat.pos)
         self._flag_flat_indexed_vertices = make_rounded_rectangle_indexed_vertices(
@@ -249,30 +318,111 @@ class LevelGeometry:
                 Vec2(flag_flat_pos[0], flag_flat_pos[1]),
                 flag_flat.width,
                 pseudo_3d_ground_height,
-            )
+            ),
         )
+
+        if self._is_closed_in:
+            self._dynamic_wall_indexed_vertices = (
+                IndexedVertices.from_vertices_and_indices(
+                    [0] * 32, [8] * 24, is_dynamic=True  # Max 4 rectangles
+                )
+            )
 
         tess.dispose()
 
     def render(self, camera):
-        self._pseudo_3d_ground_indexed_vertices.render_in_single_color(
+        camera.width = max(
+            self._exterior_rect.width,
+            self._exterior_rect.height / camera.get_aspect(),
+        )
+
+        if self._is_closed_in:
+            rectangles = list(camera.get_view_rect().subtract(self._exterior_rect))
+            num_wall_rectangles = len(rectangles)
+            if num_wall_rectangles > 0:
+                new_vertices = []
+                new_indices = []
+                for i, rectangle in enumerate(rectangles):
+                    new_vertices.append(rectangle.pos.x)
+                    new_vertices.append(rectangle.pos.y)
+                    new_vertices.append(rectangle.pos.x + rectangle.width)
+                    new_vertices.append(rectangle.pos.y)
+                    new_vertices.append(rectangle.pos.x + rectangle.width)
+                    new_vertices.append(rectangle.pos.y + rectangle.height)
+                    new_vertices.append(rectangle.pos.x)
+                    new_vertices.append(rectangle.pos.y + rectangle.height)
+                    new_indices.append(i * 4)
+                    new_indices.append(i * 4 + 1)
+                    new_indices.append(i * 4 + 2)
+                    new_indices.append(i * 4)
+                    new_indices.append(i * 4 + 2)
+                    new_indices.append(i * 4 + 3)
+                self._dynamic_wall_indexed_vertices.update_part_of_vertex_buffer(
+                    new_vertices, 0
+                )
+                self._dynamic_wall_indexed_vertices.update_part_of_index_buffer(
+                    new_indices, 0
+                )
+
+        camera_matrix = camera.get_matrix()
+        view_matrix = [camera_matrix.column(i) for i in range(4)]
+
+        single_color_shader.use()
+        # pylint: disable=assigning-non-slot
+        single_color_shader.uniforms.u_color = normalize_color(
             self._pseudo_3d_ground_color
         )
-        self._start_flat_indexed_vertices.render_in_single_color((0, 0, 255))
-        self._flag_flat_indexed_vertices.render_in_single_color((255, 0, 0))
-        self._unbuffed_platform_indexed_vertices.render_in_single_color(
+        single_color_shader.uniforms.u_view_matrix = view_matrix
+        self._pseudo_3d_ground_indexed_vertices.render(
+            single_color_shader.attributes.a_vertex_position
+        )
+        single_color_shader.clear()
+
+        stripe_shader.use()
+        # pylint: disable=assigning-non-slot
+        stripe_shader.uniforms.u_view_matrix = view_matrix
+        stripe_shader.uniforms.u_line = (
+            math.sin(self._flag_ground_stripe_angle),
+            -math.cos(self._flag_ground_stripe_angle),
+            0,
+        )
+        stripe_shader.uniforms.u_background_color = normalize_color(
+            self._flag_ground_background_color
+        )
+        stripe_shader.uniforms.u_stripe_color = normalize_color(
+            self._flag_ground_stripe_color
+        )
+        stripe_shader.uniforms.u_background_width = self._flag_ground_background_width
+        stripe_shader.uniforms.u_stripe_width = self._flag_ground_stripe_width
+        # pylint: enable=assigning-non-slot
+        self._start_flat_indexed_vertices.render(
+            stripe_shader.attributes.a_vertex_position
+        )
+        self._flag_flat_indexed_vertices.render(
+            stripe_shader.attributes.a_vertex_position
+        )
+        stripe_shader.clear()
+
+        single_color_shader.use()
+        # pylint: disable=assigning-non-slot
+        single_color_shader.uniforms.u_color = normalize_color(
             self._unbuffed_platform_color
         )
+        # pylint: enable=assigning-non-slot
+        self._unbuffed_platform_indexed_vertices.render(
+            single_color_shader.attributes.a_vertex_position
+        )
+        if self._is_closed_in and num_wall_rectangles > 0:
+            self._dynamic_wall_indexed_vertices.render(
+                single_color_shader.attributes.a_vertex_position,
+                num_triangles=num_wall_rectangles * 2,
+            )
         for buff, indexed_vertices in self._buffed_platform_indexed_vertices:
             assert isinstance(buff, ColoredPlatformBuffer)
-            indexed_vertices.render_in_single_color(buff.color)
-        if self._is_closed_in:
-            for wall_rect in camera.get_view_rect().subtract(self._exterior_rect):
-                r, g, b = self._unbuffed_platform_color
-                gl.glColor3d(r / 255, g / 255, b / 255)
-                gl.glRectd(
-                    wall_rect.pos.x, wall_rect.pos.y, wall_rect.right, wall_rect.top
-                )
+            # pylint: disable-next=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(buff.color)
+            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
+        single_color_shader.clear()
 
     def dispose(self):
         self._pseudo_3d_ground_indexed_vertices.dispose()

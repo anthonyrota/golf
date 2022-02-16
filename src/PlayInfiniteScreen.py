@@ -1,3 +1,4 @@
+import math
 from pyglet import gl
 from Camera import Camera
 from GameScreen import GameScreen
@@ -22,13 +23,17 @@ class PlayInfiniteScreen(GameScreen):
             exterior_contour=cave_contours[0],
             start_flat=start_flat,
             flag_flat=flag_flat,
+            flag_ground_background_color=(20, 198, 22),
+            flag_ground_stripe_color=(17, 180, 11),
+            flag_ground_background_width=1,
+            flag_ground_stripe_width=1,
+            flag_ground_stripe_angle=math.pi / 4,
             platform_buffers=[
-                ColoredPlatformBuffer(distance=2, color=(72, 137, 62)),
-                ColoredPlatformBuffer(distance=5, color=(86, 77, 64)),
+                ColoredPlatformBuffer(distance=1, color=(36, 105, 67)),
             ],
-            pseudo_3d_ground_height=1,
-            pseudo_3d_ground_color=(79, 251, 22),
-            unbuffed_platform_color=(66, 61, 54),
+            pseudo_3d_ground_height=1.2,
+            pseudo_3d_ground_color=(137, 253, 188),
+            unbuffed_platform_color=(1, 35, 16),
         )
         self._camera = Camera(self._game)
 
@@ -43,9 +48,7 @@ class PlayInfiniteScreen(GameScreen):
             * (self._game.window.width / self._game.window.height),
         )
 
-        self._camera.transform_gl()
         self._geometry.render(self._camera)
-        self._camera.undo_transform_gl()
 
     def update(self, dt):
         pass

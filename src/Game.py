@@ -9,7 +9,13 @@ class Game:
         self._updates_per_second = updates_per_second
         self._last_time = time()
         self.window = pyglet.window.Window(
-            config=pyglet.gl.Config(double_buffer=True, sample_buffers=1, samples=8),
+            config=pyglet.gl.Config(
+                double_buffer=True,
+                sample_buffers=1,
+                samples=8,
+                major_version=2,
+                minor_version=1,
+            ),
             resizable=True,
             caption="Golf Adventure",
         )
