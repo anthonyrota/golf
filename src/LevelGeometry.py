@@ -167,25 +167,7 @@ class LevelGeometry:
             )
         ]
 
-        # TODO: find a better way to do this
-        def round_contour(contour, r):
-            shape = Polygon(contour).buffer(r).buffer(-2 * r).buffer(r)
-            if isinstance(shape, Polygon):
-                yield list(shape.exterior.coords)
-            else:  # TODO: why?
-                assert isinstance(shape, MultiPolygon)
-                # pylint: disable-next=no-member
-                for poly in shape.geoms:
-                    assert isinstance(poly, Polygon)
-                    yield list(poly.exterior.coords)
-
-        buffs = [
-            [
-                rounded_contour
-                for contour in contours
-                for rounded_contour in round_contour(contour, 1)
-            ]
-        ]
+        buffs = [contours]
         for buff in platform_buffers:
             r = buff.distance
             buff_contours = []
@@ -230,7 +212,7 @@ class LevelGeometry:
             for j, c1 in enumerate(contour):
                 c2 = contour[(j + 1) % len(contour)]
                 l = c1[0] - c2[0] if exterior_contour and i == 0 else c2[0] - c1[0]
-                if l <= 0:
+                if l >= 0:
                     is_prev_ground = False
                     continue
                 c1h = (c1[0], c1[1] + pseudo_3d_ground_height)
@@ -291,18 +273,25 @@ class LevelGeometry:
         ]
 
         def make_rounded_rectangle_indexed_vertices(rect):
-            rounded_rect_contour = next(
-                round_contour(
+            r = min(rect.width, rect.height) / 4
+            shape = (
+                Polygon(
                     [
                         (rect.pos[0], rect.pos[1]),
                         (rect.pos[0] + rect.width, rect.pos[1]),
                         (rect.pos[0] + rect.width, rect.pos[1] + rect.height),
                         (rect.pos[0], rect.pos[1] + rect.height),
-                    ],
-                    min(rect.width, rect.height) / 4,
+                    ]
                 )
+                .buffer(r)
+                .buffer(-2 * r)
+                .buffer(r)
             )
-            return tess.make_indexed_vertices_from_contours([rounded_rect_contour])
+            assert isinstance(shape, Polygon)
+            return tess.make_indexed_vertices_from_contours(
+                # pylint: disable-next=no-member
+                [list(shape.exterior.coords)]
+            )
 
         start_flat_pos = adjust_point(start_flat.pos)
         self._start_flat_indexed_vertices = make_rounded_rectangle_indexed_vertices(

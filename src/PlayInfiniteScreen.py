@@ -29,11 +29,13 @@ class PlayInfiniteScreen(GameScreen):
             flag_ground_stripe_width=1,
             flag_ground_stripe_angle=math.pi / 4,
             platform_buffers=[
-                ColoredPlatformBuffer(distance=1, color=(36, 105, 67)),
+                ColoredPlatformBuffer(distance=0.2, color=(68, 255, 15)),
+                ColoredPlatformBuffer(distance=2, color=(46, 197, 0)),
+                ColoredPlatformBuffer(distance=6.5, color=(55, 30, 11)),
             ],
-            pseudo_3d_ground_height=1.2,
-            pseudo_3d_ground_color=(137, 253, 188),
-            unbuffed_platform_color=(1, 35, 16),
+            pseudo_3d_ground_height=1,
+            pseudo_3d_ground_color=(68, 255, 15),
+            unbuffed_platform_color=(24, 8, 2),
         )
         self._camera = Camera(self._game)
 
