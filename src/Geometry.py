@@ -369,13 +369,31 @@ class Geometry:
 
         single_color_shader.use()
         # pylint: disable=assigning-non-slot
+        single_color_shader.uniforms.u_view_matrix = view_matrix
         single_color_shader.uniforms.u_color = normalize_color(
             self._pseudo_3d_ground_color
         )
-        single_color_shader.uniforms.u_view_matrix = view_matrix
+        # pylint: enable=assigning-non-slot
         self._pseudo_3d_ground_indexed_vertices.render(
             single_color_shader.attributes.a_vertex_position
         )
+        # pylint: disable-next=assigning-non-slot
+        single_color_shader.uniforms.u_color = normalize_color(
+            self._unbuffed_platform_color
+        )
+        self._unbuffed_platform_indexed_vertices.render(
+            single_color_shader.attributes.a_vertex_position
+        )
+        if self._is_closed_in and num_wall_rectangles > 0:
+            self._dynamic_wall_indexed_vertices.render(
+                single_color_shader.attributes.a_vertex_position,
+                num_triangles=num_wall_rectangles * 2,
+            )
+        for buff, indexed_vertices in self._buffed_platform_indexed_vertices:
+            assert isinstance(buff, ColoredPlatformBuffer)
+            # pylint: disable-next=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(buff.color)
+            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
         single_color_shader.clear()
 
         stripe_shader.use()
@@ -402,27 +420,6 @@ class Geometry:
             stripe_shader.attributes.a_vertex_position
         )
         stripe_shader.clear()
-
-        single_color_shader.use()
-        # pylint: disable=assigning-non-slot
-        single_color_shader.uniforms.u_color = normalize_color(
-            self._unbuffed_platform_color
-        )
-        # pylint: enable=assigning-non-slot
-        self._unbuffed_platform_indexed_vertices.render(
-            single_color_shader.attributes.a_vertex_position
-        )
-        if self._is_closed_in and num_wall_rectangles > 0:
-            self._dynamic_wall_indexed_vertices.render(
-                single_color_shader.attributes.a_vertex_position,
-                num_triangles=num_wall_rectangles * 2,
-            )
-        for buff, indexed_vertices in self._buffed_platform_indexed_vertices:
-            assert isinstance(buff, ColoredPlatformBuffer)
-            # pylint: disable-next=assigning-non-slot
-            single_color_shader.uniforms.u_color = normalize_color(buff.color)
-            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
-        single_color_shader.clear()
 
         gl.glPushMatrix()
         camera.update_opengl_matrix()
