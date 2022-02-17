@@ -5,7 +5,7 @@ from pyglet.math import Vec2
 from Camera import Camera
 from GameScreen import GameScreen
 from cave_gen import make_cave_grid, make_cave_contours, place_start_flat_and_flag_flat
-from LevelGeometry import Geometry, ColoredPlatformBuffer
+from Geometry import Geometry, ColoredPlatformBuffer
 from Physics import Physics
 
 
