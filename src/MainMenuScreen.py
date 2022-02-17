@@ -1,5 +1,5 @@
 import glooey
-from assets import font_name
+from assets import assets
 from GameScreen import GameScreen
 from PlayLevelsScreen import PlayLevelsScreen
 from PlayInfiniteScreen import PlayInfiniteScreen
@@ -14,7 +14,7 @@ class NavigationButton(glooey.Button):
     class Foreground(glooey.Label):
         custom_color = "#ffffff"
         custom_font_size = 24
-        custom_font_name = font_name
+        custom_font_name = assets().font_name
         custom_alignment = "center"
 
     custom_alignment = "fill"

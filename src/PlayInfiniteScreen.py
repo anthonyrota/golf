@@ -1,15 +1,12 @@
 import math
-import pyglet
 from pyglet import gl
 from pyglet.math import Vec2
+from assets import assets
 from Camera import Camera
 from GameScreen import GameScreen
 from cave_gen import make_cave_grid, make_cave_contours, place_start_flat_and_flag_flat
 from Geometry import Geometry, ColoredPlatformBuffer
 from Physics import Physics
-
-
-ball_image = pyglet.image.load("../assets/Ball.png")
 
 
 class PlayInfiniteScreen(GameScreen):
@@ -45,7 +42,7 @@ class PlayInfiniteScreen(GameScreen):
             pseudo_3d_ground_height=pseudo_3d_ground_height,
             pseudo_3d_ground_color=(68, 255, 15),
             unbuffed_platform_color=(24, 8, 2),
-            ball_image=ball_image,
+            ball_image=assets().ball_image,
         )
         self._physics = Physics(
             contours=cave_contours[1:],
