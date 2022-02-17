@@ -25,7 +25,7 @@ class PlayInfiniteScreen(GameScreen):
         cave_grid = make_cave_grid(width, height)
         cave_contours = make_cave_contours(cave_grid, width, height)
         start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
-        ball_radius = 0.5
+        ball_radius = 0.75
         pseudo_3d_ground_height = 1
         self._geometry = Geometry(
             contours=cave_contours[1:],
@@ -52,7 +52,7 @@ class PlayInfiniteScreen(GameScreen):
             exterior_contour=cave_contours[0],
             ball_position=start_flat.get_middle()
             + self._geometry.raw_point_shift
-            + Vec2(0, ball_radius + pseudo_3d_ground_height / 2),
+            + Vec2(0, ball_radius),
             ball_velocity=Vec2(),
             ball_radius=ball_radius,
             gravity=Vec2(0, 0),

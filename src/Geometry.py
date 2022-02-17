@@ -115,7 +115,7 @@ class Geometry:
         self._flag_flat_indexed_vertices = None
         self._dynamic_wall_indexed_vertices = None
         self._ball_image = ball_image
-        self._ball_sprite = pyglet.sprite.Sprite(img=ball_image)
+        self._ball_sprite = pyglet.sprite.Sprite(img=ball_image, subpixel=True)
         self.raw_point_shift = None
         self._make_static_geometry(
             contours=contours,
@@ -426,11 +426,12 @@ class Geometry:
 
         gl.glPushMatrix()
         camera.update_opengl_matrix()
-        self._ball_sprite.position = physics.ball_position - Vec2(
-            physics.ball_radius, physics.ball_radius
+        self._ball_sprite.update(
+            x=physics.ball_position.x - physics.ball_radius,
+            y=physics.ball_position.y - physics.ball_radius,
+            scale_x=2 * physics.ball_radius / self._ball_image.width,
+            scale_y=2 * physics.ball_radius / self._ball_image.height,
         )
-        self._ball_sprite.scale_x = 2 * physics.ball_radius / self._ball_image.width
-        self._ball_sprite.scale_y = 2 * physics.ball_radius / self._ball_image.height
         self._ball_sprite.draw()
         gl.glPopMatrix()
 
