@@ -1,5 +1,7 @@
 from random import random
 import math
+import pyglet
+from pyglet import gl
 from pyglet.math import Vec2
 from shapely.geometry import (
     LineString,
@@ -79,7 +81,7 @@ def normalize_color(color):
     return (color[0] / 255, color[1] / 255, color[2] / 255)
 
 
-class LevelGeometry:
+class Geometry:
     def __init__(
         self,
         contours,
@@ -95,6 +97,7 @@ class LevelGeometry:
         pseudo_3d_ground_height,
         pseudo_3d_ground_color,
         unbuffed_platform_color,
+        ball_image,
     ):
         self._is_closed_in = exterior_contour is not None
         self._flag_ground_background_color = flag_ground_background_color
@@ -104,13 +107,16 @@ class LevelGeometry:
         self._flag_ground_stripe_angle = flag_ground_stripe_angle
         self._pseudo_3d_ground_color = pseudo_3d_ground_color
         self._unbuffed_platform_color = unbuffed_platform_color
-        self._exterior_rect = None
+        self.exterior_rect = None
         self._pseudo_3d_ground_indexed_vertices = None
         self._unbuffed_platform_indexed_vertices = None
         self._buffed_platform_indexed_vertices = None
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices = None
         self._dynamic_wall_indexed_vertices = None
+        self._ball_image = ball_image
+        self._ball_sprite = pyglet.sprite.Sprite(img=ball_image)
+        self.raw_point_shift = None
         self._make_static_geometry(
             contours=contours,
             exterior_contour=exterior_contour,
@@ -122,7 +128,7 @@ class LevelGeometry:
 
     @property
     def frame(self):
-        return self._exterior_rect
+        return self.exterior_rect
 
     def _make_static_geometry(
         self,
@@ -152,16 +158,26 @@ class LevelGeometry:
         exterior_bottom_left = (exterior[0][0], exterior[0][1])
         exterior_top_right = (exterior[2][0], exterior[2][1])
 
+        self.raw_point_shift = Vec2(
+            bounds_buff - exterior_bottom_left[0], bounds_buff - exterior_bottom_left[1]
+        )
+
         def adjust_point(point):
+            return (
+                point[0] + self.raw_point_shift[0],
+                point[1] + self.raw_point_shift[1],
+            )
+
+        def adjust_point_and_randomize(point):
             # shapely throws an error and I don't know why, but adding a
             # small random number fixes it.
             return (
-                point[0] - exterior_bottom_left[0] + bounds_buff + random() / 100,
-                point[1] - exterior_bottom_left[1] + bounds_buff + random() / 100,
+                point[0] + self.raw_point_shift[0] + random() / 100,
+                point[1] + self.raw_point_shift[1] + random() / 100,
             )
 
         contours = [
-            [adjust_point(c) for c in contour]
+            [adjust_point_and_randomize(c) for c in contour]
             for contour in (
                 [exterior_contour] + contours if exterior_contour else contours
             )
@@ -196,7 +212,7 @@ class LevelGeometry:
                         buff_contours.append(poly.exterior.coords)
             buffs.append(buff_contours)
 
-        self._exterior_rect = Rectangle(
+        self.exterior_rect = Rectangle(
             Vec2(),
             exterior_top_right[0] - exterior_bottom_left[0] + 2 * bounds_buff,
             exterior_top_right[1]
@@ -253,10 +269,10 @@ class LevelGeometry:
             tess.make_indexed_vertices_from_contours(
                 [
                     [
-                        (self._exterior_rect.pos.x, self._exterior_rect.pos.y),
-                        (self._exterior_rect.width, self._exterior_rect.pos.y),
-                        (self._exterior_rect.width, self._exterior_rect.height),
-                        (self._exterior_rect.pos.x, self._exterior_rect.height),
+                        (self.exterior_rect.pos.x, self.exterior_rect.pos.y),
+                        (self.exterior_rect.width, self.exterior_rect.pos.y),
+                        (self.exterior_rect.width, self.exterior_rect.height),
+                        (self.exterior_rect.pos.x, self.exterior_rect.height),
                     ]
                 ]
                 + buffs[-1]
@@ -319,14 +335,9 @@ class LevelGeometry:
 
         tess.dispose()
 
-    def render(self, camera):
-        camera.width = max(
-            self._exterior_rect.width,
-            self._exterior_rect.height / camera.get_aspect(),
-        )
-
+    def render(self, camera, physics):
         if self._is_closed_in:
-            rectangles = list(camera.get_view_rect().subtract(self._exterior_rect))
+            rectangles = list(camera.get_view_rect().subtract(self.exterior_rect))
             num_wall_rectangles = len(rectangles)
             if num_wall_rectangles > 0:
                 new_vertices = []
@@ -412,6 +423,16 @@ class LevelGeometry:
             single_color_shader.uniforms.u_color = normalize_color(buff.color)
             indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
         single_color_shader.clear()
+
+        gl.glPushMatrix()
+        camera.update_opengl_matrix()
+        self._ball_sprite.position = physics.ball_position - Vec2(
+            physics.ball_radius, physics.ball_radius
+        )
+        self._ball_sprite.scale_x = 2 * physics.ball_radius / self._ball_image.width
+        self._ball_sprite.scale_y = 2 * physics.ball_radius / self._ball_image.height
+        self._ball_sprite.draw()
+        gl.glPopMatrix()
 
     def dispose(self):
         self._pseudo_3d_ground_indexed_vertices.dispose()

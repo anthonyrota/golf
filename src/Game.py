@@ -5,8 +5,9 @@ import glooey
 
 
 class Game:
-    def __init__(self, screen, updates_per_second):
+    def __init__(self, screen, updates_per_second, target_fps):
         self._updates_per_second = updates_per_second
+        self._target_fps = target_fps
         self._last_time = time()
         self.window = pyglet.window.Window(
             config=pyglet.gl.Config(
@@ -30,7 +31,7 @@ class Game:
                 return True
 
         self.window.push_handlers(on_key_press)
-        pyglet.clock.schedule_interval(self._tick, 1 / self._updates_per_second)
+        pyglet.clock.schedule_interval(self._tick, 1 / self._target_fps)
         pyglet.app.run()
 
     def _tick(self, _):

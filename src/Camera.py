@@ -1,3 +1,4 @@
+from pyglet import gl
 from pyglet.math import Vec2, Mat4
 from Rectangle import Rectangle
 
@@ -18,6 +19,11 @@ class Camera:
             0.0,
         )
         return view_matrix
+
+    def update_opengl_matrix(self):
+        scale = self._game.window.width / self.width
+        gl.glScalef(scale, scale, 1)
+        gl.glTranslatef(-self.position.x * scale, -self.position.y * scale, 0.0)
 
     def get_view_rect(self):
         return Rectangle(

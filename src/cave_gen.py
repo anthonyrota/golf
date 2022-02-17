@@ -108,7 +108,7 @@ class Flat:
     def buffer(self, amount):
         return Flat(Vec2(self.pos.x - amount, self.pos.y), self.width + 2 * amount)
 
-    def middle(self):
+    def get_middle(self):
         return Vec2(self.pos.x + self.width / 2, self.pos.y)
 
 
@@ -184,7 +184,7 @@ def place_start_flat_and_flag_flat(contours, grid):
     flat_grounds = [flat.buffer(-0.25) for flat in _get_flat_grounds(contours)]
 
     def flat_to_grid_coords(flat):
-        mid = flat.middle()
+        mid = flat.get_middle()
         return [int(mid.y / 2) + 1, int(mid.x / 2)]
 
     def get_score(start_flat, flag_flat):
