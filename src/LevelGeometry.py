@@ -53,8 +53,8 @@ uniform float u_stripe_width;
 varying vec2 v_vertex_position;
 
 void main() {
-    float distance_to_line = abs(u_line.x * v_vertex_position.x + u_line.y * v_vertex_position.y + u_line.z);
-    if (mod(distance_to_line, u_background_width + u_stripe_width) < u_stripe_width) {
+    float signed_distance_to_line = u_line.x * v_vertex_position.x + u_line.y * v_vertex_position.y + u_line.z;
+    if (mod(signed_distance_to_line, u_background_width + u_stripe_width) < u_stripe_width) {
         gl_FragColor = vec4(u_stripe_color, 1.0);
     } else {
         gl_FragColor = vec4(u_background_color, 1.0);
