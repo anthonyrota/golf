@@ -44,15 +44,24 @@ class PlayInfiniteScreen(GameScreen):
             unbuffed_platform_color=(24, 8, 2),
             ball_image=assets().ball_image,
         )
+
+        def shift_contour(contour):
+            return [
+                (
+                    p[0] + self._geometry.raw_point_shift.x,
+                    p[1] + self._geometry.raw_point_shift.y,
+                )
+                for p in contour
+            ]
+
         self._physics = Physics(
-            contours=cave_contours[1:],
-            exterior_contour=cave_contours[0],
+            contours=[shift_contour(contour) for contour in cave_contours[1:]],
+            exterior_contour=shift_contour(cave_contours[0]),
             ball_position=start_flat.get_middle()
             + self._geometry.raw_point_shift
             + Vec2(0, ball_radius),
-            ball_velocity=Vec2(),
             ball_radius=ball_radius,
-            gravity=Vec2(0, 0),
+            gravity=Vec2(0, -20),
             flag_position=flag_flat.get_middle() + self._geometry.raw_point_shift,
         )
         self._camera = Camera(self._game)
