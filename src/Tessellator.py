@@ -63,9 +63,7 @@ class Tessellator:
             gl.gluTessEndContour(self._tess)
         gl.gluTessEndPolygon(self._tess)
 
-        indexed_vertices = IndexedVertices.from_vertices_and_indices(
-            self._vertices, self._indices
-        )
+        indexed_vertices = IndexedVertices(self._vertices, self._indices)
         self._vertices = None
         self._indices = None
         return indexed_vertices

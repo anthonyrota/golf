@@ -10,13 +10,16 @@ from shapely.geometry import (
     MultiPolygon,
     LinearRing,
 )
-from pyshaders import from_string
+import pyshaders
 from Rectangle import Rectangle
 from Tessellator import Tessellator
-from IndexedVertices import IndexedVertices
+from IndexedVertices import Buffer, IndexedVertices
 
 
-single_color_shader = from_string(
+BUFFER_RESOLUTION = 8
+
+
+single_color_shader = pyshaders.from_string(
     [
         """attribute vec2 a_vertex_position;
 uniform mat4 u_view_matrix;
@@ -35,7 +38,7 @@ void main() {
 )
 
 
-stripe_shader = from_string(
+stripe_shader = pyshaders.from_string(
     [
         """attribute vec2 a_vertex_position;
 uniform mat4 u_view_matrix;
@@ -56,12 +59,40 @@ varying vec2 v_vertex_position;
 
 void main() {
     float signed_distance_to_line = u_line.x * v_vertex_position.x + u_line.y * v_vertex_position.y + u_line.z;
-    if (mod(signed_distance_to_line, u_background_width + u_stripe_width) < u_stripe_width) {
+    if (mod(signed_distance_to_line, u_background_width + u_stripe_width) <= u_stripe_width) {
         gl_FragColor = vec4(u_stripe_color, 1.0);
     } else {
         gl_FragColor = vec4(u_background_color, 1.0);
     }
 }"""
+    ],
+)
+
+
+dotted_line_shader = pyshaders.from_string(
+    [
+        """attribute vec2 a_vertex_position;
+attribute float a_distance;
+uniform mat4 u_view_matrix;
+varying float v_distance;
+
+void main() {
+    v_distance = a_distance;
+    gl_Position = u_view_matrix * vec4(a_vertex_position, 0.0, 1.0);
+}"""
+    ],
+    [
+        """uniform vec3 u_color;
+uniform float u_space_size;
+uniform float u_dotted_size;
+varying float v_distance;
+
+void main() {
+    if (mod(v_distance, u_space_size + u_dotted_size) > u_dotted_size) {
+        discard;
+    }
+    gl_FragColor = vec4(u_color, 1.0);
+}""",
     ],
 )
 
@@ -98,6 +129,9 @@ class Geometry:
         pseudo_3d_ground_color,
         unbuffed_platform_color,
         ball_image,
+        max_shot_preview_points,
+        shot_preview_dotted_line_space_size,
+        shot_preview_dotted_line_dotted_size,
     ):
         self._is_closed_in = exterior_contour is not None
         self._flag_ground_background_color = flag_ground_background_color
@@ -107,6 +141,12 @@ class Geometry:
         self._flag_ground_stripe_angle = flag_ground_stripe_angle
         self._pseudo_3d_ground_color = pseudo_3d_ground_color
         self._unbuffed_platform_color = unbuffed_platform_color
+        self._shot_preview_dotted_line_space_size = shot_preview_dotted_line_space_size
+        self._shot_preview_dotted_line_dotted_size = (
+            shot_preview_dotted_line_dotted_size
+        )
+        self._ball_image = ball_image
+        self._ball_sprite = pyglet.sprite.Sprite(img=ball_image, subpixel=True)
         self.exterior_rect = None
         self._pseudo_3d_ground_indexed_vertices = None
         self._unbuffed_platform_indexed_vertices = None
@@ -114,8 +154,8 @@ class Geometry:
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices = None
         self._dynamic_wall_indexed_vertices = None
-        self._ball_image = ball_image
-        self._ball_sprite = pyglet.sprite.Sprite(img=ball_image, subpixel=True)
+        self._dynamic_shot_preview_vertex_buffer = None
+        self._dynamic_shot_preview_distance_buffer = None
         self.raw_point_shift = None
         self._make_static_geometry(
             contours=contours,
@@ -124,6 +164,7 @@ class Geometry:
             start_flat=start_flat,
             flag_flat=flag_flat,
             platform_buffers=platform_buffers,
+            max_shot_preview_points=max_shot_preview_points,
         )
 
     @property
@@ -138,6 +179,7 @@ class Geometry:
         start_flat,
         flag_flat,
         platform_buffers,
+        max_shot_preview_points,
     ):
 
         bounds_buff = (
@@ -189,7 +231,7 @@ class Geometry:
             buff_contours = []
             if exterior_contour:
                 shape = LinearRing(reversed(contours[0])).parallel_offset(
-                    r, side="left"
+                    r, side="left", resolution=BUFFER_RESOLUTION
                 )
                 if isinstance(shape, LineString):
                     buff_contours.append(shape.coords)
@@ -199,7 +241,7 @@ class Geometry:
                     for line in shape.geoms:
                         buff_contours.append(line.coords)
             for i, contour in enumerate(contours[1:] if exterior_contour else contours):
-                shape = Polygon(contour).buffer(-r)
+                shape = Polygon(contour).buffer(-r, BUFFER_RESOLUTION)
                 if shape.is_empty:
                     continue
                 if isinstance(shape, Polygon):
@@ -261,8 +303,8 @@ class Geometry:
                 ground_indices.append(d)
                 is_prev_ground = True
 
-        self._pseudo_3d_ground_indexed_vertices = (
-            IndexedVertices.from_vertices_and_indices(ground_vertices, ground_indices)
+        self._pseudo_3d_ground_indexed_vertices = IndexedVertices(
+            ground_vertices, ground_indices
         )
 
         self._unbuffed_platform_indexed_vertices = (
@@ -299,9 +341,9 @@ class Geometry:
                         (rect.pos[0], rect.pos[1] + rect.height),
                     ]
                 )
-                .buffer(r)
-                .buffer(-2 * r)
-                .buffer(r)
+                .buffer(r, BUFFER_RESOLUTION)
+                .buffer(-2 * r, BUFFER_RESOLUTION)
+                .buffer(r, BUFFER_RESOLUTION)
             )
             assert isinstance(shape, Polygon)
             return tess.make_indexed_vertices_from_contours(
@@ -327,19 +369,43 @@ class Geometry:
         )
 
         if self._is_closed_in:
-            self._dynamic_wall_indexed_vertices = (
-                IndexedVertices.from_vertices_and_indices(
-                    [0] * 32, [8] * 24, is_dynamic=True  # Max 4 rectangles
-                )
+            self._dynamic_wall_indexed_vertices = IndexedVertices(
+                [0] * 32, [8] * 24, is_dynamic=True  # Max 4 rectangles
             )
+
+        self._dynamic_shot_preview_vertex_buffer = Buffer(
+            [0] * max_shot_preview_points * 2, 2, "float", is_dynamic=True
+        )
+        self._dynamic_shot_preview_distance_buffer = Buffer(
+            [0] * max_shot_preview_points, 1, "float", is_dynamic=True
+        )
 
         tess.dispose()
 
     def render(self, camera, physics):
+        camera_matrix = camera.get_matrix()
+        view_matrix = [camera_matrix.column(i) for i in range(4)]
+
+        single_color_shader.use()
+        # pylint: disable=assigning-non-slot
+        single_color_shader.uniforms.u_view_matrix = view_matrix
+        single_color_shader.uniforms.u_color = normalize_color(
+            self._pseudo_3d_ground_color
+        )
+        # pylint: enable=assigning-non-slot
+        self._pseudo_3d_ground_indexed_vertices.render(
+            single_color_shader.attributes.a_vertex_position
+        )
+        # pylint: disable-next=assigning-non-slot
+        single_color_shader.uniforms.u_color = normalize_color(
+            self._unbuffed_platform_color
+        )
+        self._unbuffed_platform_indexed_vertices.render(
+            single_color_shader.attributes.a_vertex_position
+        )
         if self._is_closed_in:
             rectangles = list(camera.get_view_rect().subtract(self.exterior_rect))
-            num_wall_rectangles = len(rectangles)
-            if num_wall_rectangles > 0:
+            if len(rectangles) > 0:
                 new_vertices = []
                 new_indices = []
                 for i, rectangle in enumerate(rectangles):
@@ -363,31 +429,9 @@ class Geometry:
                 self._dynamic_wall_indexed_vertices.update_part_of_index_buffer(
                     new_indices, 0
                 )
-
-        camera_matrix = camera.get_matrix()
-        view_matrix = [camera_matrix.column(i) for i in range(4)]
-
-        single_color_shader.use()
-        # pylint: disable=assigning-non-slot
-        single_color_shader.uniforms.u_view_matrix = view_matrix
-        single_color_shader.uniforms.u_color = normalize_color(
-            self._pseudo_3d_ground_color
-        )
-        # pylint: enable=assigning-non-slot
-        self._pseudo_3d_ground_indexed_vertices.render(
-            single_color_shader.attributes.a_vertex_position
-        )
-        # pylint: disable-next=assigning-non-slot
-        single_color_shader.uniforms.u_color = normalize_color(
-            self._unbuffed_platform_color
-        )
-        self._unbuffed_platform_indexed_vertices.render(
-            single_color_shader.attributes.a_vertex_position
-        )
-        if self._is_closed_in and num_wall_rectangles > 0:
             self._dynamic_wall_indexed_vertices.render(
                 single_color_shader.attributes.a_vertex_position,
-                num_triangles=num_wall_rectangles * 2,
+                num_triangles=len(rectangles) * 2,
             )
         for buff, indexed_vertices in self._buffed_platform_indexed_vertices:
             assert isinstance(buff, ColoredPlatformBuffer)
@@ -421,26 +465,45 @@ class Geometry:
         )
         stripe_shader.clear()
 
-        gl.glPushMatrix()
-        camera.update_opengl_matrix()
-
         if physics.is_dragging:
             path = physics.preview_ball_path()
             if path:
-                batch = pyglet.graphics.Batch()
-                lines = []
-                for c1, c2 in zip(path[:-1], path[1:]):
-                    lines.append(
-                        pyglet.shapes.Line(
-                            c1[0],
-                            c1[1],
-                            c2[0],
-                            c2[1],
-                            width=1 / camera.get_scale(),
-                            batch=batch,
-                        )
-                    )
-                batch.draw()
+                vertices = []
+                distances = []
+                distance = 0
+                prev_c = None
+                scale = camera.get_scale()
+                for c in path:
+                    vertices.append(c[0])
+                    vertices.append(c[1])
+                    distances.append(distance)
+                    if prev_c:
+                        distance += c.distance(prev_c) * scale
+                    prev_c = c
+                self._dynamic_shot_preview_vertex_buffer.update_part(vertices, 0)
+                self._dynamic_shot_preview_distance_buffer.update_part(distances, 0)
+                dotted_line_shader.use()
+                # pylint: disable=assigning-non-slot
+                dotted_line_shader.uniforms.u_view_matrix = view_matrix
+                dotted_line_shader.uniforms.u_color = (1, 1, 1)
+                dotted_line_shader.uniforms.u_space_size = (
+                    self._shot_preview_dotted_line_space_size
+                )
+                dotted_line_shader.uniforms.u_dotted_size = (
+                    self._shot_preview_dotted_line_dotted_size
+                )
+                # pylint: enable=assigning-non-slot
+                self._dynamic_shot_preview_vertex_buffer.bind_to_attrib(
+                    dotted_line_shader.attributes.a_vertex_position
+                )
+                self._dynamic_shot_preview_distance_buffer.bind_to_attrib(
+                    dotted_line_shader.attributes.a_distance
+                )
+                gl.glDrawArrays(gl.GL_LINE_STRIP, 0, len(path))
+                dotted_line_shader.clear()
+
+        gl.glPushMatrix()
+        camera.update_opengl_matrix()
 
         self._ball_sprite.update(
             x=physics.ball_position.x - physics.ball_radius,

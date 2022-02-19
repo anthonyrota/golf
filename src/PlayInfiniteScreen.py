@@ -18,6 +18,7 @@ class PlayInfiniteScreen(GameScreen):
 
     def bind(self, game):
         self._game = game
+
         width, height = 35, 35
         cave_grid = make_cave_grid(
             width=width,
@@ -32,6 +33,8 @@ class PlayInfiniteScreen(GameScreen):
         start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
         ball_radius = 0.75
         pseudo_3d_ground_height = 1
+        shot_preview_simulation_updates = self._game.updates_per_second // 2
+
         self._geometry = Geometry(
             contours=cave_contours[1:],
             exterior_contour=cave_contours[0],
@@ -51,6 +54,9 @@ class PlayInfiniteScreen(GameScreen):
             pseudo_3d_ground_color=(68, 255, 15),
             unbuffed_platform_color=(24, 8, 2),
             ball_image=assets().ball_image,
+            max_shot_preview_points=shot_preview_simulation_updates + 1,
+            shot_preview_dotted_line_space_size=2,
+            shot_preview_dotted_line_dotted_size=4,
         )
 
         def shift_contour(contour):
@@ -72,6 +78,8 @@ class PlayInfiniteScreen(GameScreen):
             ball_radius=ball_radius,
             gravity=Vec2(0, -100),
             flag_position=flag_flat.get_middle() + self._geometry.raw_point_shift,
+            shot_preview_simulation_updates=shot_preview_simulation_updates,
+            on_level_complete=self._on_level_complete,
         )
         self._camera = Camera(self._game)
 
@@ -87,6 +95,9 @@ class PlayInfiniteScreen(GameScreen):
 
     def update(self, dt):
         self._physics.update(dt)
+
+    def _on_level_complete(self, num_shots):
+        pass
 
     def unbind(self):
         self._game = None

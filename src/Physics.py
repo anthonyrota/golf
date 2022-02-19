@@ -27,6 +27,8 @@ class Physics:
         ball_radius,
         gravity,
         flag_position,
+        shot_preview_simulation_updates,
+        on_level_complete,
     ):
         self._game = game
         self._space = pymunk.Space()
@@ -56,13 +58,17 @@ class Physics:
         self._gravity = gravity
         self._flag_position = flag_position
         self._mouse_dragging = None
+        self._shot_preview_simulation_updates = shot_preview_simulation_updates
         self._bind_events()
+        self._shot_number = 0
+        self._on_level_complete = on_level_complete
 
     def update(self, dt):
         if (
             self._mouse_dragging
             and self._mouse_dragging.state == _MouseDraggingState.RELEASED
         ):
+            self._shot_number += 1
             self._ball_shape.body.velocity = self._get_drag_velocity()
             self._mouse_dragging = None
         self._space.step(dt)
@@ -83,7 +89,7 @@ class Physics:
         ball_collision_type = 1
         collided = False
 
-        def on_ball_collision(_space, _arbiter, _data):
+        def on_ball_collision(_arb, _space, _data):
             nonlocal collided
             collided = True
             return False
@@ -100,7 +106,7 @@ class Physics:
 
         dt = 1 / self._game.updates_per_second
         positions = [Vec2(ball_shape.body.position[0], ball_shape.body.position[1])]
-        for _ in range(self._game.updates_per_second // 2):
+        for _ in range(self._shot_preview_simulation_updates):
             space.step(dt)
             pos = Vec2(ball_shape.body.position[0], ball_shape.body.position[1])
             if collided:

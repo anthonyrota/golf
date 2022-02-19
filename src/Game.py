@@ -13,7 +13,7 @@ class Game:
             config=pyglet.gl.Config(
                 double_buffer=True,
                 sample_buffers=1,
-                samples=8,
+                samples=4,
                 major_version=2,
                 minor_version=1,
             ),
