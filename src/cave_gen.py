@@ -208,13 +208,12 @@ def place_start_flat_and_flag_flat(contours, grid):
 def make_cave_grid(
     width,
     height,
+    wall_chance,
+    min_surrounding_walls,
+    iterations,
+    pillar_iterations,
+    min_open_percent
 ):
-    wall_chance = 40
-    min_surrounding_walls = 5
-    iterations = 5
-    pillar_iterations = 5
-    min_open_percent = 0.3
-
     def do_cellular_automata(grid, make_pillars):
         updated_grid = [row[:] for row in grid]
 

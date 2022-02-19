@@ -423,6 +423,25 @@ class Geometry:
 
         gl.glPushMatrix()
         camera.update_opengl_matrix()
+
+        if physics.is_dragging:
+            path = physics.preview_ball_path()
+            if path:
+                batch = pyglet.graphics.Batch()
+                lines = []
+                for c1, c2 in zip(path[:-1], path[1:]):
+                    lines.append(
+                        pyglet.shapes.Line(
+                            c1[0],
+                            c1[1],
+                            c2[0],
+                            c2[1],
+                            width=1 / camera.get_scale(),
+                            batch=batch,
+                        )
+                    )
+                batch.draw()
+
         self._ball_sprite.update(
             x=physics.ball_position.x - physics.ball_radius,
             y=physics.ball_position.y - physics.ball_radius,
@@ -430,6 +449,7 @@ class Geometry:
             scale_y=2 * physics.ball_radius / self._ball_image.height,
         )
         self._ball_sprite.draw()
+
         gl.glPopMatrix()
 
     def dispose(self):

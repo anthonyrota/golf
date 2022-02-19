@@ -18,8 +18,16 @@ class PlayInfiniteScreen(GameScreen):
 
     def bind(self, game):
         self._game = game
-        width, height = 45, 45
-        cave_grid = make_cave_grid(width, height)
+        width, height = 35, 35
+        cave_grid = make_cave_grid(
+            width=width,
+            height=height,
+            wall_chance=35,
+            min_surrounding_walls=5,
+            iterations=5,
+            pillar_iterations=5,
+            min_open_percent=0.3,
+        )
         cave_contours = make_cave_contours(cave_grid, width, height)
         start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
         ball_radius = 0.75
@@ -55,13 +63,14 @@ class PlayInfiniteScreen(GameScreen):
             ]
 
         self._physics = Physics(
+            game=self._game,
             contours=[shift_contour(contour) for contour in cave_contours[1:]],
             exterior_contour=shift_contour(cave_contours[0]),
             ball_position=start_flat.get_middle()
             + self._geometry.raw_point_shift
             + Vec2(0, ball_radius),
             ball_radius=ball_radius,
-            gravity=Vec2(0, -20),
+            gravity=Vec2(0, -100),
             flag_position=flag_flat.get_middle() + self._geometry.raw_point_shift,
         )
         self._camera = Camera(self._game)
@@ -81,6 +90,7 @@ class PlayInfiniteScreen(GameScreen):
 
     def unbind(self):
         self._game = None
+        self._physics.dispose()
         self._geometry.dispose()
         self._geometry = None
         self._physics = None

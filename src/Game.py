@@ -6,7 +6,7 @@ import glooey
 
 class Game:
     def __init__(self, screen, updates_per_second, target_fps):
-        self._updates_per_second = updates_per_second
+        self.updates_per_second = updates_per_second
         self._target_fps = target_fps
         self._last_time = time()
         self.window = pyglet.window.Window(
@@ -36,9 +36,9 @@ class Game:
 
     def _tick(self, _):
         cur_time = time()
-        num_updates = int((cur_time - self._last_time) * self._updates_per_second)
-        self._last_time += num_updates / self._updates_per_second
-        dt = 1 / self._updates_per_second
+        num_updates = int((cur_time - self._last_time) * self.updates_per_second)
+        self._last_time += num_updates / self.updates_per_second
+        dt = 1 / self.updates_per_second
         for _ in range(num_updates):
             self._screen.update(dt)
         self._screen.render()
