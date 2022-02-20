@@ -58,7 +58,11 @@ uniform float u_stripe_width;
 varying vec2 v_vertex_position;
 
 void main() {
-    float signed_distance_to_line = u_line.x * v_vertex_position.x + u_line.y * v_vertex_position.y + u_line.z;
+    float signed_distance_to_line = (
+        u_line.x * v_vertex_position.x
+        + u_line.y * v_vertex_position.y
+        + u_line.z
+    );
     if (mod(signed_distance_to_line, u_background_width + u_stripe_width) <= u_stripe_width) {
         gl_FragColor = vec4(u_stripe_color, 1.0);
     } else {
@@ -85,13 +89,20 @@ void main() {
         """uniform vec3 u_color;
 uniform float u_space_size;
 uniform float u_dotted_size;
+uniform float u_line_length;
+uniform float u_fade_factor;
 varying float v_distance;
 
 void main() {
+    float fade_distance = 1.0 - v_distance / u_line_length;
+    float fade_amount = 1.0 - exp2(-u_fade_factor * fade_distance * fade_distance);
+    fade_amount = clamp(fade_amount, 0.0, 1.0);
+
     if (mod(v_distance, u_space_size + u_dotted_size) > u_dotted_size) {
         discard;
     }
-    gl_FragColor = vec4(u_color, 1.0);
+
+    gl_FragColor = vec4(u_color, fade_amount);
 }""",
     ],
 )
@@ -132,6 +143,8 @@ class Geometry:
         max_shot_preview_points,
         shot_preview_dotted_line_space_size,
         shot_preview_dotted_line_dotted_size,
+        shot_preview_dotted_line_color,
+        shot_preview_dotted_line_fade_factor,
     ):
         self._is_closed_in = exterior_contour is not None
         self._flag_ground_background_color = flag_ground_background_color
@@ -144,6 +157,10 @@ class Geometry:
         self._shot_preview_dotted_line_space_size = shot_preview_dotted_line_space_size
         self._shot_preview_dotted_line_dotted_size = (
             shot_preview_dotted_line_dotted_size
+        )
+        self._shot_preview_dotted_line_color = shot_preview_dotted_line_color
+        self._shot_preview_dotted_line_fade_factor = (
+            shot_preview_dotted_line_fade_factor
         )
         self._ball_image = ball_image
         self._ball_sprite = pyglet.sprite.Sprite(img=ball_image, subpixel=True)
@@ -383,6 +400,12 @@ class Geometry:
         tess.dispose()
 
     def render(self, camera, physics):
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        gl.glLoadIdentity()
+        gl.glEnableClientState(gl.GL_VERTEX_ARRAY)
+        gl.glEnable(gl.GL_BLEND)
+        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+
         camera_matrix = camera.get_matrix()
         view_matrix = [camera_matrix.column(i) for i in range(4)]
 
@@ -476,16 +499,22 @@ class Geometry:
                 for c in path:
                     vertices.append(c[0])
                     vertices.append(c[1])
-                    distances.append(distance)
                     if prev_c:
                         distance += c.distance(prev_c) * scale
+                    distances.append(distance)
                     prev_c = c
                 self._dynamic_shot_preview_vertex_buffer.update_part(vertices, 0)
                 self._dynamic_shot_preview_distance_buffer.update_part(distances, 0)
                 dotted_line_shader.use()
                 # pylint: disable=assigning-non-slot
                 dotted_line_shader.uniforms.u_view_matrix = view_matrix
-                dotted_line_shader.uniforms.u_color = (1, 1, 1)
+                dotted_line_shader.uniforms.u_color = (
+                    self._shot_preview_dotted_line_color
+                )
+                dotted_line_shader.uniforms.u_fade_factor = (
+                    self._shot_preview_dotted_line_fade_factor
+                )
+                dotted_line_shader.uniforms.u_line_length = distance
                 dotted_line_shader.uniforms.u_space_size = (
                     self._shot_preview_dotted_line_space_size
                 )
@@ -529,3 +558,12 @@ class Geometry:
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices.dispose()
         self._flag_flat_indexed_vertices = None
+        self._ball_image = None
+        self._ball_sprite = None
+        if self._is_closed_in:
+            self._dynamic_wall_indexed_vertices.dispose()
+            self._dynamic_wall_indexed_vertices = None
+        self._dynamic_shot_preview_vertex_buffer.dispose()
+        self._dynamic_shot_preview_vertex_buffer = None
+        self._dynamic_shot_preview_distance_buffer.dispose()
+        self._dynamic_shot_preview_distance_buffer = None

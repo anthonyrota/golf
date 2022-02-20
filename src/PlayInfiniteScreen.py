@@ -1,5 +1,4 @@
 import math
-from pyglet import gl
 from pyglet.math import Vec2
 from assets import assets
 from Camera import Camera
@@ -33,7 +32,7 @@ class PlayInfiniteScreen(GameScreen):
         start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
         ball_radius = 0.75
         pseudo_3d_ground_height = 1
-        shot_preview_simulation_updates = self._game.updates_per_second // 2
+        shot_preview_simulation_updates = self._game.updates_per_second * 2
 
         self._geometry = Geometry(
             contours=cave_contours[1:],
@@ -55,8 +54,10 @@ class PlayInfiniteScreen(GameScreen):
             unbuffed_platform_color=(24, 8, 2),
             ball_image=assets().ball_image,
             max_shot_preview_points=shot_preview_simulation_updates + 1,
-            shot_preview_dotted_line_space_size=2,
-            shot_preview_dotted_line_dotted_size=4,
+            shot_preview_dotted_line_space_size=5,
+            shot_preview_dotted_line_dotted_size=10,
+            shot_preview_dotted_line_color=(1, 1, 1),
+            shot_preview_dotted_line_fade_factor=250.0,
         )
 
         def shift_contour(contour):
@@ -76,17 +77,15 @@ class PlayInfiniteScreen(GameScreen):
             + self._geometry.raw_point_shift
             + Vec2(0, ball_radius),
             ball_radius=ball_radius,
-            gravity=Vec2(0, -100),
+            gravity=Vec2(0, -30),
             flag_position=flag_flat.get_middle() + self._geometry.raw_point_shift,
+            flag_collision_shape_radius=1,
             shot_preview_simulation_updates=shot_preview_simulation_updates,
             on_level_complete=self._on_level_complete,
         )
         self._camera = Camera(self._game)
 
     def render(self):
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-        gl.glLoadIdentity()
-        gl.glEnableClientState(gl.GL_VERTEX_ARRAY)
         self._camera.width = max(
             self._geometry.exterior_rect.width,
             self._geometry.exterior_rect.height / self._camera.get_aspect(),
@@ -94,7 +93,7 @@ class PlayInfiniteScreen(GameScreen):
         self._geometry.render(camera=self._camera, physics=self._physics)
 
     def update(self, dt):
-        self._physics.update(dt)
+        return self._physics.update(dt)
 
     def _on_level_complete(self, num_shots):
         pass

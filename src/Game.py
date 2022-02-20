@@ -40,7 +40,8 @@ class Game:
         self._last_time += num_updates / self.updates_per_second
         dt = 1 / self.updates_per_second
         for _ in range(num_updates):
-            self._screen.update(dt)
+            if self._screen.update(dt) is False:
+                break
         self._screen.render()
 
     def set_screen(self, screen):
