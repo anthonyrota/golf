@@ -38,7 +38,7 @@ class Game:
     def _tick(self, dt):
         self._average_dt.append(dt)
         if len(self._average_dt) == 60:
-            print('fps', len(self._average_dt) / sum(self._average_dt))
+            print("fps", len(self._average_dt) / sum(self._average_dt))
             self._average_dt = []
         cur_time = time()
         num_updates = int((cur_time - self._last_time) * self.updates_per_second)

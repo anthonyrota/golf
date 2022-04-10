@@ -117,10 +117,11 @@ class Physics:
     def get_drag_velocity(self):
         return self._mouse_dragging.start - self._mouse_dragging.current
 
-    def simulate_ball_path_with_velocity(self, velocity):
+    def simulate_ball_path_from_position_with_velocity(self, position, velocity):
         space = pymunk.Space()
         space.gravity = self._gravity
         ball_shape = self._ball_shape.copy()
+        ball_shape.body.position = position
         ball_shape.body.velocity = velocity
         space.add(ball_shape.body, ball_shape)
         dt = 1 / self._game.updates_per_second

@@ -170,7 +170,8 @@ class Geometry:
         unbuffed_platform_color,
         ball_image,
         max_shot_preview_points,
-        shot_preview_width,
+        shot_preview_lerp_up,
+        shot_preview_lerp_down,
         shot_preview_dotted_line_space_size,
         shot_preview_dotted_line_dotted_size,
         shot_preview_dotted_line_color,
@@ -190,7 +191,8 @@ class Geometry:
         self._shot_preview_dotted_line_dotted_size = (
             shot_preview_dotted_line_dotted_size
         )
-        self._shot_preview_width = shot_preview_width
+        self._shot_preview_lerp_up = shot_preview_lerp_up
+        self._shot_preview_lerp_down = shot_preview_lerp_down
         self._shot_preview_dotted_line_color = shot_preview_dotted_line_color
         self._shot_preview_fade_factor = shot_preview_dotted_line_fade_factor
         self._shot_preview_polygon_color = shot_preview_polygon_color
@@ -554,14 +556,21 @@ class Geometry:
 
         if physics.is_dragging:
             drag_velocity = physics.get_drag_velocity()
-            vel1 = drag_velocity.lerp(
-                Vec2(drag_velocity.x, abs(drag_velocity)), self._shot_preview_width
+            vel_y_sign = 1 if drag_velocity.y > 0 else -1
+            vel1 = Vec2(
+                drag_velocity.x,
+                drag_velocity.y * (1 + vel_y_sign * self._shot_preview_lerp_up),
             )
-            vel2 = drag_velocity.lerp(
-                Vec2(drag_velocity.x, -abs(drag_velocity)), self._shot_preview_width
+            vel2 = Vec2(
+                drag_velocity.x,
+                drag_velocity.y * (1 - vel_y_sign * self._shot_preview_lerp_down),
             )
-            path1 = physics.simulate_ball_path_with_velocity(vel1)
-            path2 = physics.simulate_ball_path_with_velocity(vel2)
+            path1 = physics.simulate_ball_path_from_position_with_velocity(
+                physics.ball_position + Vec2(0, physics.ball_radius), vel1
+            )
+            path2 = physics.simulate_ball_path_from_position_with_velocity(
+                physics.ball_position - Vec2(0, physics.ball_radius), vel2
+            )
             verts1, dists1, dist1 = update_dynamic_shot_preview_dotted_line_buffers(
                 0, path1
             )
@@ -600,6 +609,7 @@ class Geometry:
             shot_preview_dotted_line_shader.uniforms.u_dotted_size = (
                 self._shot_preview_dotted_line_dotted_size
             )
+            shot_preview_dotted_line_shader.uniforms.u_line_length = dist
             # pylint: enable=assigning-non-slot
             for path, vert_buf, dist_buf in zip(
                 (path1, path2),
@@ -607,7 +617,6 @@ class Geometry:
                 self._dynamic_shot_preview_dotted_line_distance_buffers,
             ):
                 # pylint: disable-next=assigning-non-slot
-                shot_preview_dotted_line_shader.uniforms.u_line_length = dist
                 vert_buf.bind_to_attrib(
                     shot_preview_dotted_line_shader.attributes.a_vertex_position
                 )
