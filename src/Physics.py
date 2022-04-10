@@ -97,7 +97,7 @@ class Physics:
         ):
             self._shot_number += 1
             self._is_in_shot = True
-            self._ball_shape.body.velocity = self._get_drag_velocity()
+            self._ball_shape.body.velocity = self.get_drag_velocity()
             self._mouse_dragging = None
             self._ball_flag_collision_handler.begin = self._on_ball_flag_collision
         self._space.step(dt)
@@ -114,44 +114,21 @@ class Physics:
             print("stop")
             return False
 
-    def _get_drag_velocity(self):
+    def get_drag_velocity(self):
         return self._mouse_dragging.start - self._mouse_dragging.current
 
-    def preview_ball_path(self):
-        assert self.is_dragging
-        return self._simulate_ball_path_with_velocity(self._get_drag_velocity())
-
-    def _simulate_ball_path_with_velocity(self, velocity):
-        self._space.remove(self._ball_shape.body, self._ball_shape)
-        space = self._space.copy()
-        self._space.add(self._ball_shape.body, self._ball_shape)
-
-        collided = False
-
-        def on_ball_collision(_arb, _space, _data):
-            nonlocal collided
-            collided = True
-            return False
-
-        collision_handler = space.add_collision_handler(
-            default_collision_type, ball_collision_type
-        )
-        collision_handler.begin = on_ball_collision
-
+    def simulate_ball_path_with_velocity(self, velocity):
+        space = pymunk.Space()
+        space.gravity = self._gravity
         ball_shape = self._ball_shape.copy()
         ball_shape.body.velocity = velocity
         space.add(ball_shape.body, ball_shape)
-
         dt = 1 / self._game.updates_per_second
         positions = [Vec2(ball_shape.body.position[0], ball_shape.body.position[1])]
         for _ in range(self._shot_preview_simulation_updates):
             space.step(dt)
             pos = Vec2(ball_shape.body.position[0], ball_shape.body.position[1])
-            if collided:
-                break
             positions.append(pos)
-        if len(positions) < 2:
-            return None
         return positions
 
     def dispose(self):

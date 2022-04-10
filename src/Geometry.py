@@ -73,7 +73,7 @@ void main() {
 )
 
 
-dotted_line_shader = pyshaders.from_string(
+shot_preview_dotted_line_shader = pyshaders.from_string(
     [
         """attribute vec2 a_vertex_position;
 attribute float a_distance;
@@ -94,7 +94,7 @@ uniform float u_fade_factor;
 varying float v_distance;
 
 void main() {
-    float fade_distance = 1.0 - v_distance / u_line_length;
+    float fade_distance = max(1.0 - v_distance / u_line_length, 0.0);
     float fade_amount = 1.0 - exp2(-u_fade_factor * fade_distance * fade_distance);
     fade_amount = clamp(fade_amount, 0.0, 1.0);
 
@@ -103,6 +103,35 @@ void main() {
     }
 
     gl_FragColor = vec4(u_color, fade_amount);
+}""",
+    ],
+)
+
+
+shot_preview_polygon_shader = pyshaders.from_string(
+    [
+        """attribute vec2 a_vertex_position;
+attribute float a_distance;
+uniform mat4 u_view_matrix;
+varying float v_distance;
+
+void main() {
+    v_distance = a_distance;
+    gl_Position = u_view_matrix * vec4(a_vertex_position, 0.0, 1.0);
+}"""
+    ],
+    [
+        """uniform vec3 u_color;
+uniform float u_line_length;
+uniform float u_fade_factor;
+uniform float u_base_alpha;
+varying float v_distance;
+
+void main() {
+    float fade_distance = max(1.0 - v_distance / u_line_length, 0.0);
+    float fade_amount = 1.0 - exp2(-u_fade_factor * fade_distance * fade_distance);
+    fade_amount = clamp(fade_amount, 0.0, 1.0);
+    gl_FragColor = vec4(u_color, fade_amount * u_base_alpha);
 }""",
     ],
 )
@@ -141,10 +170,13 @@ class Geometry:
         unbuffed_platform_color,
         ball_image,
         max_shot_preview_points,
+        shot_preview_width,
         shot_preview_dotted_line_space_size,
         shot_preview_dotted_line_dotted_size,
         shot_preview_dotted_line_color,
         shot_preview_dotted_line_fade_factor,
+        shot_preview_polygon_color,
+        shot_preview_base_alpha,
     ):
         self._is_closed_in = exterior_contour is not None
         self._flag_ground_background_color = flag_ground_background_color
@@ -158,10 +190,11 @@ class Geometry:
         self._shot_preview_dotted_line_dotted_size = (
             shot_preview_dotted_line_dotted_size
         )
+        self._shot_preview_width = shot_preview_width
         self._shot_preview_dotted_line_color = shot_preview_dotted_line_color
-        self._shot_preview_dotted_line_fade_factor = (
-            shot_preview_dotted_line_fade_factor
-        )
+        self._shot_preview_fade_factor = shot_preview_dotted_line_fade_factor
+        self._shot_preview_polygon_color = shot_preview_polygon_color
+        self._shot_preview_base_alpha = shot_preview_base_alpha
         self._ball_image = ball_image
         self._ball_sprite = pyglet.sprite.Sprite(img=ball_image, subpixel=True)
         self.exterior_rect = None
@@ -171,8 +204,10 @@ class Geometry:
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices = None
         self._dynamic_wall_indexed_vertices = None
-        self._dynamic_shot_preview_vertex_buffer = None
-        self._dynamic_shot_preview_distance_buffer = None
+        self._dynamic_shot_preview_dotted_line_vertex_buffers = None
+        self._dynamic_shot_preview_dotted_line_distance_buffers = None
+        self._dynamic_shot_preview_polygon_vertex_buffer = None
+        self._dynamic_shot_preview_polygon_distance_buffer = None
         self.raw_point_shift = None
         self._make_static_geometry(
             contours=contours,
@@ -390,11 +425,19 @@ class Geometry:
                 [0] * 32, [8] * 24, is_dynamic=True  # Max 4 rectangles
             )
 
-        self._dynamic_shot_preview_vertex_buffer = Buffer(
-            [0] * max_shot_preview_points * 2, 2, "float", is_dynamic=True
+        self._dynamic_shot_preview_dotted_line_vertex_buffers = [
+            Buffer([0] * max_shot_preview_points * 2, 2, "float", is_dynamic=True)
+            for _ in range(2)
+        ]
+        self._dynamic_shot_preview_dotted_line_distance_buffers = [
+            Buffer([0] * max_shot_preview_points, 1, "float", is_dynamic=True)
+            for _ in range(2)
+        ]
+        self._dynamic_shot_preview_polygon_vertex_buffer = Buffer(
+            [0] * max_shot_preview_points * 4, 2, "float", is_dynamic=True
         )
-        self._dynamic_shot_preview_distance_buffer = Buffer(
-            [0] * max_shot_preview_points, 1, "float", is_dynamic=True
+        self._dynamic_shot_preview_polygon_distance_buffer = Buffer(
+            [0] * max_shot_preview_points * 2, 1, "float", is_dynamic=True
         )
 
         tess.dispose()
@@ -488,48 +531,113 @@ class Geometry:
         )
         stripe_shader.clear()
 
+        def update_dynamic_shot_preview_dotted_line_buffers(num_buffer, path):
+            vertices = []
+            distances = []
+            distance = 0
+            prev_c = None
+            scale = camera.get_scale()
+            for c in path:
+                vertices.append(c[0])
+                vertices.append(c[1])
+                if prev_c:
+                    distance += c.distance(prev_c) * scale
+                distances.append(distance)
+                prev_c = c
+            self._dynamic_shot_preview_dotted_line_vertex_buffers[
+                num_buffer
+            ].update_part(vertices, 0)
+            self._dynamic_shot_preview_dotted_line_distance_buffers[
+                num_buffer
+            ].update_part(distances, 0)
+            return vertices, distances, distance
+
         if physics.is_dragging:
-            path = physics.preview_ball_path()
-            if path:
-                vertices = []
-                distances = []
-                distance = 0
-                prev_c = None
-                scale = camera.get_scale()
-                for c in path:
-                    vertices.append(c[0])
-                    vertices.append(c[1])
-                    if prev_c:
-                        distance += c.distance(prev_c) * scale
-                    distances.append(distance)
-                    prev_c = c
-                self._dynamic_shot_preview_vertex_buffer.update_part(vertices, 0)
-                self._dynamic_shot_preview_distance_buffer.update_part(distances, 0)
-                dotted_line_shader.use()
-                # pylint: disable=assigning-non-slot
-                dotted_line_shader.uniforms.u_view_matrix = view_matrix
-                dotted_line_shader.uniforms.u_color = (
-                    self._shot_preview_dotted_line_color
+            drag_velocity = physics.get_drag_velocity()
+            vel1 = drag_velocity.lerp(
+                Vec2(drag_velocity.x, abs(drag_velocity)), self._shot_preview_width
+            )
+            vel2 = drag_velocity.lerp(
+                Vec2(drag_velocity.x, -abs(drag_velocity)), self._shot_preview_width
+            )
+            path1 = physics.simulate_ball_path_with_velocity(vel1)
+            path2 = physics.simulate_ball_path_with_velocity(vel2)
+            verts1, dists1, dist1 = update_dynamic_shot_preview_dotted_line_buffers(
+                0, path1
+            )
+            verts2, dists2, dist2 = update_dynamic_shot_preview_dotted_line_buffers(
+                1, path2
+            )
+            dist = min(dist1, dist2)
+            polygon_verts = []
+            polygon_dists = []
+            for i, (d1, d2) in enumerate(zip(dists1, dists2)):
+                polygon_verts.append(verts1[i * 2])
+                polygon_verts.append(verts1[i * 2 + 1])
+                polygon_verts.append(verts2[i * 2])
+                polygon_verts.append(verts2[i * 2 + 1])
+                polygon_dists.append(d1)
+                polygon_dists.append(d2)
+            self._dynamic_shot_preview_polygon_vertex_buffer.update_part(
+                polygon_verts, 0
+            )
+            self._dynamic_shot_preview_polygon_distance_buffer.update_part(
+                polygon_dists, 0
+            )
+
+            shot_preview_dotted_line_shader.use()
+            # pylint: disable=assigning-non-slot
+            shot_preview_dotted_line_shader.uniforms.u_view_matrix = view_matrix
+            shot_preview_dotted_line_shader.uniforms.u_color = (
+                self._shot_preview_dotted_line_color
+            )
+            shot_preview_dotted_line_shader.uniforms.u_fade_factor = (
+                self._shot_preview_fade_factor
+            )
+            shot_preview_dotted_line_shader.uniforms.u_space_size = (
+                self._shot_preview_dotted_line_space_size
+            )
+            shot_preview_dotted_line_shader.uniforms.u_dotted_size = (
+                self._shot_preview_dotted_line_dotted_size
+            )
+            # pylint: enable=assigning-non-slot
+            for path, vert_buf, dist_buf in zip(
+                (path1, path2),
+                self._dynamic_shot_preview_dotted_line_vertex_buffers,
+                self._dynamic_shot_preview_dotted_line_distance_buffers,
+            ):
+                # pylint: disable-next=assigning-non-slot
+                shot_preview_dotted_line_shader.uniforms.u_line_length = dist
+                vert_buf.bind_to_attrib(
+                    shot_preview_dotted_line_shader.attributes.a_vertex_position
                 )
-                dotted_line_shader.uniforms.u_fade_factor = (
-                    self._shot_preview_dotted_line_fade_factor
-                )
-                dotted_line_shader.uniforms.u_line_length = distance
-                dotted_line_shader.uniforms.u_space_size = (
-                    self._shot_preview_dotted_line_space_size
-                )
-                dotted_line_shader.uniforms.u_dotted_size = (
-                    self._shot_preview_dotted_line_dotted_size
-                )
-                # pylint: enable=assigning-non-slot
-                self._dynamic_shot_preview_vertex_buffer.bind_to_attrib(
-                    dotted_line_shader.attributes.a_vertex_position
-                )
-                self._dynamic_shot_preview_distance_buffer.bind_to_attrib(
-                    dotted_line_shader.attributes.a_distance
+                dist_buf.bind_to_attrib(
+                    shot_preview_dotted_line_shader.attributes.a_distance
                 )
                 gl.glDrawArrays(gl.GL_LINE_STRIP, 0, len(path))
-                dotted_line_shader.clear()
+            shot_preview_dotted_line_shader.clear()
+
+            shot_preview_polygon_shader.use()
+            # pylint: disable=assigning-non-slot
+            shot_preview_polygon_shader.uniforms.u_view_matrix = view_matrix
+            shot_preview_polygon_shader.uniforms.u_color = (
+                self._shot_preview_polygon_color
+            )
+            shot_preview_polygon_shader.uniforms.u_fade_factor = (
+                self._shot_preview_fade_factor
+            )
+            shot_preview_polygon_shader.uniforms.u_base_alpha = (
+                self._shot_preview_base_alpha
+            )
+            shot_preview_polygon_shader.uniforms.u_line_length = dist
+            self._dynamic_shot_preview_polygon_vertex_buffer.bind_to_attrib(
+                shot_preview_polygon_shader.attributes.a_vertex_position
+            )
+            self._dynamic_shot_preview_polygon_distance_buffer.bind_to_attrib(
+                shot_preview_polygon_shader.attributes.a_distance
+            )
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, len(path1) * 2)
+            shot_preview_polygon_shader.clear()
 
         gl.glPushMatrix()
         camera.update_opengl_matrix()
@@ -563,7 +671,11 @@ class Geometry:
         if self._is_closed_in:
             self._dynamic_wall_indexed_vertices.dispose()
             self._dynamic_wall_indexed_vertices = None
-        self._dynamic_shot_preview_vertex_buffer.dispose()
-        self._dynamic_shot_preview_vertex_buffer = None
-        self._dynamic_shot_preview_distance_buffer.dispose()
-        self._dynamic_shot_preview_distance_buffer = None
+        self._dynamic_shot_preview_dotted_line_vertex_buffers[0].dispose()
+        self._dynamic_shot_preview_dotted_line_vertex_buffers[1].dispose()
+        self._dynamic_shot_preview_dotted_line_vertex_buffers = None
+        self._dynamic_shot_preview_dotted_line_distance_buffers[0].dispose()
+        self._dynamic_shot_preview_dotted_line_distance_buffers[1].dispose()
+        self._dynamic_shot_preview_dotted_line_distance_buffers = None
+        self._dynamic_shot_preview_polygon_vertex_buffer.dispose()
+        self._dynamic_shot_preview_polygon_distance_buffer.dispose()

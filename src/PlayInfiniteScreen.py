@@ -22,7 +22,7 @@ class PlayInfiniteScreen(GameScreen):
         cave_grid = make_cave_grid(
             width=width,
             height=height,
-            wall_chance=35,
+            wall_chance=40,
             min_surrounding_walls=5,
             iterations=5,
             pillar_iterations=5,
@@ -32,7 +32,7 @@ class PlayInfiniteScreen(GameScreen):
         start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
         ball_radius = 0.75
         pseudo_3d_ground_height = 1
-        shot_preview_simulation_updates = self._game.updates_per_second * 2
+        shot_preview_simulation_updates = self._game.updates_per_second * 3
 
         self._geometry = Geometry(
             contours=cave_contours[1:],
@@ -54,10 +54,13 @@ class PlayInfiniteScreen(GameScreen):
             unbuffed_platform_color=(24, 8, 2),
             ball_image=assets().ball_image,
             max_shot_preview_points=shot_preview_simulation_updates + 1,
+            shot_preview_width=0.15,
             shot_preview_dotted_line_space_size=5,
             shot_preview_dotted_line_dotted_size=10,
             shot_preview_dotted_line_color=(1, 1, 1),
             shot_preview_dotted_line_fade_factor=250.0,
+            shot_preview_polygon_color=(1, 1, 1),
+            shot_preview_base_alpha=0.25,
         )
 
         def shift_contour(contour):
