@@ -73,7 +73,7 @@ void main() {
 )
 
 
-shot_preview_dotted_line_shader = pyshaders.from_string(
+faded_dotted_line_shader = pyshaders.from_string(
     [
         """attribute vec2 a_vertex_position;
 attribute float a_distance;
@@ -108,7 +108,7 @@ void main() {
 )
 
 
-shot_preview_polygon_shader = pyshaders.from_string(
+faded_color_shader = pyshaders.from_string(
     [
         """attribute vec2 a_vertex_position;
 attribute float a_distance;
@@ -178,6 +178,10 @@ class Geometry:
         shot_preview_dotted_line_fade_factor,
         shot_preview_polygon_color,
         shot_preview_base_alpha,
+        num_ball_trail_points,
+        ball_trail_color,
+        ball_trail_fade_factor,
+        ball_trail_base_alpha,
     ):
         self._is_closed_in = exterior_contour is not None
         self._flag_ground_background_color = flag_ground_background_color
@@ -197,6 +201,10 @@ class Geometry:
         self._shot_preview_fade_factor = shot_preview_dotted_line_fade_factor
         self._shot_preview_polygon_color = shot_preview_polygon_color
         self._shot_preview_base_alpha = shot_preview_base_alpha
+        self._num_ball_trail_points = num_ball_trail_points
+        self._ball_trail_color = ball_trail_color
+        self._ball_trail_fade_factor = ball_trail_fade_factor
+        self._ball_trail_base_alpha = ball_trail_base_alpha
         self._ball_image = ball_image
         self._ball_sprite = pyglet.sprite.Sprite(img=ball_image, subpixel=True)
         self.exterior_rect = None
@@ -210,6 +218,8 @@ class Geometry:
         self._dynamic_shot_preview_dotted_line_distance_buffers = None
         self._dynamic_shot_preview_polygon_vertex_buffer = None
         self._dynamic_shot_preview_polygon_distance_buffer = None
+        self._dynamic_ball_trail_polygon_vertex_buffer = None
+        self._dynamic_ball_trail_polygon_distance_buffer = None
         self.raw_point_shift = None
         self._make_static_geometry(
             contours=contours,
@@ -441,6 +451,12 @@ class Geometry:
         self._dynamic_shot_preview_polygon_distance_buffer = Buffer(
             [0] * max_shot_preview_points * 2, 1, "float", is_dynamic=True
         )
+        self._dynamic_ball_trail_polygon_vertex_buffer = Buffer(
+            [0] * self._num_ball_trail_points * 4, 2, "float", is_dynamic=True
+        )
+        self._dynamic_ball_trail_polygon_distance_buffer = Buffer(
+            [0] * self._num_ball_trail_points * 2, 1, "float", is_dynamic=True
+        )
 
         tess.dispose()
 
@@ -594,22 +610,22 @@ class Geometry:
                 polygon_dists, 0
             )
 
-            shot_preview_dotted_line_shader.use()
+            faded_dotted_line_shader.use()
             # pylint: disable=assigning-non-slot
-            shot_preview_dotted_line_shader.uniforms.u_view_matrix = view_matrix
-            shot_preview_dotted_line_shader.uniforms.u_color = (
+            faded_dotted_line_shader.uniforms.u_view_matrix = view_matrix
+            faded_dotted_line_shader.uniforms.u_color = (
                 self._shot_preview_dotted_line_color
             )
-            shot_preview_dotted_line_shader.uniforms.u_fade_factor = (
+            faded_dotted_line_shader.uniforms.u_fade_factor = (
                 self._shot_preview_fade_factor
             )
-            shot_preview_dotted_line_shader.uniforms.u_space_size = (
+            faded_dotted_line_shader.uniforms.u_space_size = (
                 self._shot_preview_dotted_line_space_size
             )
-            shot_preview_dotted_line_shader.uniforms.u_dotted_size = (
+            faded_dotted_line_shader.uniforms.u_dotted_size = (
                 self._shot_preview_dotted_line_dotted_size
             )
-            shot_preview_dotted_line_shader.uniforms.u_line_length = dist
+            faded_dotted_line_shader.uniforms.u_line_length = dist
             # pylint: enable=assigning-non-slot
             for path, vert_buf, dist_buf in zip(
                 (path1, path2),
@@ -618,35 +634,62 @@ class Geometry:
             ):
                 # pylint: disable-next=assigning-non-slot
                 vert_buf.bind_to_attrib(
-                    shot_preview_dotted_line_shader.attributes.a_vertex_position
+                    faded_dotted_line_shader.attributes.a_vertex_position
                 )
-                dist_buf.bind_to_attrib(
-                    shot_preview_dotted_line_shader.attributes.a_distance
-                )
+                dist_buf.bind_to_attrib(faded_dotted_line_shader.attributes.a_distance)
                 gl.glDrawArrays(gl.GL_LINE_STRIP, 0, len(path))
-            shot_preview_dotted_line_shader.clear()
+            faded_dotted_line_shader.clear()
 
-            shot_preview_polygon_shader.use()
+            faded_color_shader.use()
             # pylint: disable=assigning-non-slot
-            shot_preview_polygon_shader.uniforms.u_view_matrix = view_matrix
-            shot_preview_polygon_shader.uniforms.u_color = (
-                self._shot_preview_polygon_color
-            )
-            shot_preview_polygon_shader.uniforms.u_fade_factor = (
-                self._shot_preview_fade_factor
-            )
-            shot_preview_polygon_shader.uniforms.u_base_alpha = (
-                self._shot_preview_base_alpha
-            )
-            shot_preview_polygon_shader.uniforms.u_line_length = dist
+            faded_color_shader.uniforms.u_view_matrix = view_matrix
+            faded_color_shader.uniforms.u_color = self._shot_preview_polygon_color
+            faded_color_shader.uniforms.u_fade_factor = self._shot_preview_fade_factor
+            faded_color_shader.uniforms.u_base_alpha = self._shot_preview_base_alpha
+            faded_color_shader.uniforms.u_line_length = dist
+            # pylint: enable=assigning-non-slot
             self._dynamic_shot_preview_polygon_vertex_buffer.bind_to_attrib(
-                shot_preview_polygon_shader.attributes.a_vertex_position
+                faded_color_shader.attributes.a_vertex_position
             )
             self._dynamic_shot_preview_polygon_distance_buffer.bind_to_attrib(
-                shot_preview_polygon_shader.attributes.a_distance
+                faded_color_shader.attributes.a_distance
             )
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, len(path1) * 2)
-            shot_preview_polygon_shader.clear()
+            faded_color_shader.clear()
+
+        trail = physics.get_ball_trail()
+        if len(trail) > 1:
+            ball_trail_verts = []
+            ball_trail_dists = []
+            for i, (v1, v2) in enumerate(trail):
+                ball_trail_verts.append(v1[0])
+                ball_trail_verts.append(v1[1])
+                ball_trail_verts.append(v2[0])
+                ball_trail_verts.append(v2[1])
+                ball_trail_dists.append(1 - i / (len(trail) - 1))
+                ball_trail_dists.append(1 - i / (len(trail) - 1))
+            self._dynamic_ball_trail_polygon_vertex_buffer.update_part(
+                ball_trail_verts, 0
+            )
+            self._dynamic_ball_trail_polygon_distance_buffer.update_part(
+                ball_trail_dists, 0
+            )
+            faded_color_shader.use()
+            # pylint: disable=assigning-non-slot
+            faded_color_shader.uniforms.u_view_matrix = view_matrix
+            faded_color_shader.uniforms.u_color = self._ball_trail_color
+            faded_color_shader.uniforms.u_fade_factor = self._ball_trail_fade_factor
+            faded_color_shader.uniforms.u_base_alpha = self._ball_trail_base_alpha
+            faded_color_shader.uniforms.u_line_length = 1.0
+            # pylint: enable=assigning-non-slot
+            self._dynamic_ball_trail_polygon_vertex_buffer.bind_to_attrib(
+                faded_color_shader.attributes.a_vertex_position
+            )
+            self._dynamic_ball_trail_polygon_distance_buffer.bind_to_attrib(
+                faded_color_shader.attributes.a_distance
+            )
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, len(trail) * 2)
+            faded_color_shader.clear()
 
         gl.glPushMatrix()
         camera.update_opengl_matrix()

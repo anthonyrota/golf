@@ -34,6 +34,9 @@ class Physics:
         flag_position,
         flag_collision_shape_radius,
         shot_preview_simulation_updates,
+        updates_per_new_ball_trail_point,
+        num_ball_trail_points,
+        ball_trail_width,
         on_level_complete,
     ):
         self._game = game
@@ -47,6 +50,11 @@ class Physics:
         self._mouse_dragging = None
         self._shot_preview_simulation_updates = shot_preview_simulation_updates
         self._shot_number = 0
+        self._updates_per_new_ball_trail_point = updates_per_new_ball_trail_point
+        self._updates_until_new_ball_trail_point = 0
+        self._num_ball_trail_points = num_ball_trail_points
+        self._ball_trail_points = []
+        self._ball_trail_width = ball_trail_width
         self._on_level_complete = on_level_complete
 
         for contour in [exterior_contour] + contours:
@@ -111,8 +119,18 @@ class Physics:
             self._ball_shape = shape
             self._is_in_shot = False
             self._ball_flag_collision_handler.begin = lambda _arb, _space, _data: False
-            print("stop")
+            self._updates_until_new_ball_trail_point = 0
+            self._ball_trail_points = []
             return False
+        if self._is_in_shot:
+            if self._updates_until_new_ball_trail_point == 0:
+                self._updates_until_new_ball_trail_point = (
+                    self._updates_per_new_ball_trail_point
+                )
+                self._ball_trail_points.append(self._get_ball_trail_point())
+                if len(self._ball_trail_points) > self._num_ball_trail_points:
+                    self._ball_trail_points.pop(0)
+            self._updates_until_new_ball_trail_point -= 1
 
     def get_drag_velocity(self):
         return self._mouse_dragging.start - self._mouse_dragging.current
@@ -131,6 +149,18 @@ class Physics:
             pos = Vec2(ball_shape.body.position[0], ball_shape.body.position[1])
             positions.append(pos)
         return positions
+
+    def _get_ball_trail_point(self):
+        pos = self.ball_position
+        ccw_offset = (
+            Vec2(-self._ball_shape.body.velocity[1], self._ball_shape.body.velocity[0])
+            .normalize()
+            .scale(self._ball_trail_width)
+        )
+        return (pos + ccw_offset, pos - ccw_offset)
+
+    def get_ball_trail(self):
+        return self._ball_trail_points + [self._get_ball_trail_point()]
 
     def dispose(self):
         self._unbind_events()

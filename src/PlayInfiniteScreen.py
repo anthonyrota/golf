@@ -57,6 +57,8 @@ class PlayInfiniteScreen(GameScreen):
         ball_radius = 0.75
         pseudo_3d_ground_height = 1
         shot_preview_simulation_updates = self._game.updates_per_second * 3
+        ball_trail_points_per_second = 30
+        num_ball_trail_points = ball_trail_points_per_second // 2
 
         self._geometry = Geometry(
             contours=cave_contours[1:],
@@ -83,9 +85,13 @@ class PlayInfiniteScreen(GameScreen):
             shot_preview_dotted_line_space_size=5,
             shot_preview_dotted_line_dotted_size=10,
             shot_preview_dotted_line_color=(1, 1, 1),
-            shot_preview_dotted_line_fade_factor=250.0,
+            shot_preview_dotted_line_fade_factor=10.0,
             shot_preview_polygon_color=(1, 1, 1),
             shot_preview_base_alpha=0.25,
+            num_ball_trail_points=num_ball_trail_points + 1,
+            ball_trail_color=(1, 1, 1),
+            ball_trail_fade_factor=10.0,
+            ball_trail_base_alpha=0.6,
         )
 
         def shift_contour(contour):
@@ -109,6 +115,10 @@ class PlayInfiniteScreen(GameScreen):
             flag_position=flag_flat.get_middle() + self._geometry.raw_point_shift,
             flag_collision_shape_radius=1,
             shot_preview_simulation_updates=shot_preview_simulation_updates,
+            updates_per_new_ball_trail_point=self._game.updates_per_second
+            // ball_trail_points_per_second,
+            num_ball_trail_points=num_ball_trail_points,
+            ball_trail_width=ball_radius / 2,
             on_level_complete=self._on_level_complete,
         )
         self._camera = Camera(self._game)
