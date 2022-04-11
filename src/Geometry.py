@@ -669,8 +669,6 @@ class Geometry:
         for (_, indexed_vertices) in self._buffed_platform_indexed_vertices:
             indexed_vertices.dispose()
         self._buffed_platform_indexed_vertices = None
-        self._unbuffed_platform_indexed_vertices.dispose()
-        self._unbuffed_platform_indexed_vertices = None
         self._start_flat_indexed_vertices.dispose()
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices.dispose()

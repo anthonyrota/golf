@@ -1,9 +1,9 @@
 from assets import assets
 from Game import Game
-from PlayInfiniteScreen import PlayInfiniteScreen
+from MainMenuScreen import MainMenuScreen
 
 
 if __name__ == "__main__":
     assets()
-    game = Game(screen=PlayInfiniteScreen(), updates_per_second=240, target_fps=60)
+    game = Game(screen=MainMenuScreen(), updates_per_second=240, target_fps=60)
     game.run()

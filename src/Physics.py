@@ -75,7 +75,7 @@ class Physics:
         self._bind_events()
 
     def _on_ball_flag_collision(self, _arb, _space, _data):
-        print("reached flag!")
+        self._on_level_complete()
         return False
 
     def _make_ball_shape(self, position):

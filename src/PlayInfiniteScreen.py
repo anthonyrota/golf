@@ -1,4 +1,5 @@
 import math
+from threading import Thread
 from pyglet.math import Vec2
 from assets import assets
 from Camera import Camera
@@ -8,28 +9,51 @@ from Geometry import Geometry, ColoredPlatformBuffer
 from Physics import Physics
 
 
+def _gen_cave(width, height):
+    cave_grid = make_cave_grid(
+        width=width,
+        height=height,
+        wall_chance=40,
+        min_surrounding_walls=5,
+        iterations=5,
+        pillar_iterations=2,
+        min_open_percent=0.35,
+    )
+    cave_contours = make_cave_contours(cave_grid, width, height)
+    start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
+    return cave_contours, start_flat, flag_flat
+
+
+class CallbackThread(Thread):
+    def __init__(self, cb, target, args):
+        Thread.__init__(self, None, target, None, args)
+        self._cb = cb
+
+    def run(self):
+        self._cb(self._target(*self._args))
+
+
 class PlayInfiniteScreen(GameScreen):
-    def __init__(self):
+    def __init__(self, cave=None):
         self._game = None
         self._geometry = None
         self._camera = None
         self._physics = None
+        self._level_complete = False
+        self._cave = cave
+        self._next_cave = None
 
     def bind(self, game):
         self._game = game
 
-        width, height = 35, 35
-        cave_grid = make_cave_grid(
-            width=width,
-            height=height,
-            wall_chance=40,
-            min_surrounding_walls=5,
-            iterations=5,
-            pillar_iterations=5,
-            min_open_percent=0.3,
+        width, height = 60, 30
+        cave_contours, start_flat, flag_flat = self._cave or _gen_cave(width, height)
+        thread = CallbackThread(
+            cb=self._on_thread_done,
+            target=_gen_cave,
+            args=(width, height),
         )
-        cave_contours = make_cave_contours(cave_grid, width, height)
-        start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
+        thread.start()
         ball_radius = 0.75
         pseudo_3d_ground_height = 1
         shot_preview_simulation_updates = self._game.updates_per_second * 3
@@ -95,12 +119,21 @@ class PlayInfiniteScreen(GameScreen):
             self._geometry.exterior_rect.height / self._camera.get_aspect(),
         )
         self._geometry.render(camera=self._camera, physics=self._physics)
+        if self._level_complete and self._next_cave is not None:
+            self._game.set_screen(PlayInfiniteScreen(cave=self._next_cave))
 
     def update(self, dt):
+        if self._level_complete:
+            return False
         return self._physics.update(dt)
 
-    def _on_level_complete(self, num_shots):
-        pass
+    def _on_thread_done(self, cave):
+        self._next_cave = cave
+        if self._level_complete:
+            self._game.set_screen(PlayInfiniteScreen(cave=self._next_cave))
+
+    def _on_level_complete(self):
+        self._level_complete = True
 
     def unbind(self):
         self._game = None
