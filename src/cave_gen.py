@@ -1,6 +1,14 @@
-from random import randint
+import math
+from random import randint, randrange
 from collections import deque
 from pyglet.math import Vec2
+from collision import (
+    Vector as CollisionVector,
+    Poly,
+    Concave_Poly as ConcavePoly,
+    collide,
+)
+from Rectangle import Rectangle
 
 
 def make_cave_contours(grid, width, height):
@@ -83,14 +91,18 @@ def make_cave_contours(grid, width, height):
             break
 
     for polygon in polygons:
-        double_signed_area = 0
-        for i, c1 in enumerate(polygon):
-            c2 = polygon[(i + 1) % len(polygon)]
-            double_signed_area += (c2[0] - c1[0]) * (c2[1] + c1[1])
-        if double_signed_area > 0:
+        if _get_signed_area_of_polygon(polygon) > 0:
             polygon.reverse()  # make counter-clockwise
 
     return polygons
+
+
+def _get_signed_area_of_polygon(polygon):
+    double_signed_area = 0
+    for i, c1 in enumerate(polygon):
+        c2 = polygon[(i + 1) % len(polygon)]
+        double_signed_area += (c2[0] - c1[0]) * (c2[1] + c1[1])
+    return double_signed_area / 2
 
 
 class Flat:
@@ -107,6 +119,9 @@ class Flat:
 
     def buffer(self, amount):
         return Flat(Vec2(self.pos.x - amount, self.pos.y), self.width + 2 * amount)
+
+    def make_rect(self, height):
+        return Rectangle(self.pos, self.width, height)
 
     def get_middle(self):
         return Vec2(self.pos.x + self.width / 2, self.pos.y)
@@ -205,6 +220,95 @@ def place_start_flat_and_flag_flat(contours, grid):
     return flat_grounds[i], flat_grounds[j]
 
 
+def make_sand_pits(
+    contours, min_sand_pit_area, max_sand_pit_area, max_sand_pits, avoid_rects
+):
+    avoid_polys = [
+        ConcavePoly(
+            CollisionVector(0, 0), [CollisionVector(v[0], v[1]) for v in inner_contour]
+        )
+        for inner_contour in contours[1:]
+    ] + [
+        Poly(
+            CollisionVector(0, 0),
+            [
+                CollisionVector(rect.pos.x, rect.pos.y),
+                CollisionVector(rect.right, rect.pos.y),
+                CollisionVector(rect.right, rect.top),
+                CollisionVector(rect.pos.x, rect.top),
+            ],
+        )
+        for rect in avoid_rects
+    ]
+
+    def sand_pit_to_poly(sand_pit):
+        return ConcavePoly(
+            CollisionVector(0, 0), [CollisionVector(v[0], v[1]) for v in sand_pit]
+        )
+
+    sand_pits = []
+    sand_pit_starts = []
+    outer_contour = contours[0]
+    for i, (v1, v2) in enumerate(zip(outer_contour, outer_contour[1:])):
+        if v2[1] < v1[1]:
+            sand_pit_starts.append(i)
+        elif v2[1] > v1[1]:
+            start_index = None
+            while len(sand_pit_starts) > 0:
+                start_index_ = sand_pit_starts[-1]
+                start_v = outer_contour[start_index_]
+                if v2[1] >= start_v[1]:
+                    start_index = start_index_
+                    sand_pit_starts.pop()
+                else:
+                    break
+            if start_index is not None:
+                sand_pit = outer_contour[start_index : i + 2]
+                sand_pit_poly = sand_pit_to_poly(sand_pit)
+                if (
+                    len(sand_pit) >= 4
+                    # Compare signed area, not absolute area, to also check winding
+                    # is counter-clockwise, i.e. the sand pit is not inside the cave
+                    # wall (in which case the winding would be clockwise)
+                    and (
+                        min_sand_pit_area
+                        <= -_get_signed_area_of_polygon(sand_pit)
+                        <= max_sand_pit_area
+                    )
+                    and not any(
+                        collide(sand_pit_poly, avoid_poly) for avoid_poly in avoid_polys
+                    )
+                ):
+                    sand_pits.append(sand_pit)
+
+    sand_pit_polys = [sand_pit_to_poly(sand_pit) for sand_pit in sand_pits]
+    selected_sand_pits = []
+    selected_sand_pit_polys = []
+    while len(sand_pits) > 0 and len(selected_sand_pits) < max_sand_pits:
+        i = randrange(len(sand_pits))
+        sand_pit = sand_pits.pop(i)
+        sand_pit_poly = sand_pit_polys.pop(i)
+        if any(
+            collide(sand_pit_poly, selected_sand_pit_poly)
+            for selected_sand_pit_poly in selected_sand_pit_polys
+        ):
+            continue
+        selected_sand_pits.append(sand_pit)
+        selected_sand_pit_polys.append(sand_pit_poly)
+
+    for sand_pit in selected_sand_pits:
+        top_left = sand_pit[0]
+        top_right = sand_pit[-1]
+        step = 0.25
+        x = top_right[0] - step
+        while x > top_left[0]:
+            dx = x - top_left[0]
+            sand_pit.append((x, top_left[1] + math.sin(dx) / 10))
+            x -= step
+
+    return selected_sand_pits
+
+
 def make_cave_grid(
     width,
     height,
@@ -212,7 +316,7 @@ def make_cave_grid(
     min_surrounding_walls,
     iterations,
     pillar_iterations,
-    min_open_percent
+    min_open_percent,
 ):
     def do_cellular_automata(grid, make_pillars):
         updated_grid = [row[:] for row in grid]

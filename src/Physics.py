@@ -28,6 +28,7 @@ class Physics:
         game,
         contours,
         exterior_contour,
+        sand_pits,
         ball_position,
         ball_radius,
         gravity,
@@ -45,6 +46,8 @@ class Physics:
 
         self._friction = 0.5
         self._elasticity = 0.65
+        self._sand_friction = 1
+        self._sand_elasticity = 0
         self._gravity = gravity
         self._flag_position = flag_position
         self._mouse_dragging = None
@@ -63,6 +66,14 @@ class Physics:
                 shape = pymunk.Segment(self._space.static_body, p1, p2, 0.1)
                 shape.friction = self._friction
                 shape.elasticity = self._elasticity
+                self._space.add(shape)
+
+        for sand_pit in sand_pits:
+            for i, p1 in enumerate(sand_pit):
+                p2 = sand_pit[(i + 1) % len(sand_pit)]
+                shape = pymunk.Segment(self._space.static_body, p1, p2, 0.1)
+                shape.friction = self._sand_friction
+                shape.elasticity = self._sand_elasticity
                 self._space.add(shape)
 
         self._is_in_shot = False

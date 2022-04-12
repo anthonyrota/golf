@@ -168,6 +168,9 @@ class Geometry:
         pseudo_3d_ground_height,
         pseudo_3d_ground_color,
         unbuffed_platform_color,
+        sand_pits,
+        sand_pits_color,
+        sand_pits_pseudo_3d_ground_color,
         ball_image,
         max_shot_preview_points,
         shot_preview_lerp_up,
@@ -191,6 +194,8 @@ class Geometry:
         self._flag_ground_stripe_angle = flag_ground_stripe_angle
         self._pseudo_3d_ground_color = pseudo_3d_ground_color
         self._unbuffed_platform_color = unbuffed_platform_color
+        self._sand_pits_color = sand_pits_color
+        self._sand_pits_pseudo_3d_ground_color = sand_pits_pseudo_3d_ground_color
         self._shot_preview_dotted_line_space_size = shot_preview_dotted_line_space_size
         self._shot_preview_dotted_line_dotted_size = (
             shot_preview_dotted_line_dotted_size
@@ -211,6 +216,8 @@ class Geometry:
         self._pseudo_3d_ground_indexed_vertices = None
         self._unbuffed_platform_indexed_vertices = None
         self._buffed_platform_indexed_vertices = None
+        self._sand_pits_indexed_vertices = None
+        self._sand_pits_3d_ground_indexed_vertices = None
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices = None
         self._dynamic_wall_indexed_vertices = None
@@ -228,6 +235,7 @@ class Geometry:
             start_flat=start_flat,
             flag_flat=flag_flat,
             platform_buffers=platform_buffers,
+            sand_pits=sand_pits,
             max_shot_preview_points=max_shot_preview_points,
         )
 
@@ -243,6 +251,7 @@ class Geometry:
         start_flat,
         flag_flat,
         platform_buffers,
+        sand_pits,
         max_shot_preview_points,
     ):
 
@@ -327,29 +336,27 @@ class Geometry:
             + (0 if exterior_contour else pseudo_3d_ground_height),
         )
 
-        ground_vertices = []
-        ground_indices = []
-        for i, contour in enumerate(buffs[0]):
+        def make_pseudo_3d_ground_for_contour(vertices, indices, contour, is_inside):
             is_prev_ground = False
-            for j, c1 in enumerate(contour):
-                c2 = contour[(j + 1) % len(contour)]
-                l = c1[0] - c2[0] if exterior_contour and i == 0 else c2[0] - c1[0]
+            for i, c1 in enumerate(contour):
+                c2 = contour[(i + 1) % len(contour)]
+                l = c1[0] - c2[0] if exterior_contour and is_inside else c2[0] - c1[0]
                 if l >= 0:
                     is_prev_ground = False
                     continue
                 c1h = (c1[0], c1[1] + pseudo_3d_ground_height)
                 c2h = (c2[0], c2[1] + pseudo_3d_ground_height)
                 if not is_prev_ground:
-                    ground_vertices.append(c1[0])
-                    ground_vertices.append(c1[1])
-                    ground_vertices.append(c1h[0])
-                    ground_vertices.append(c1h[1])
-                num_vertices = len(ground_vertices) // 2
-                ground_vertices.append(c2[0])
-                ground_vertices.append(c2[1])
-                ground_vertices.append(c2h[0])
-                ground_vertices.append(c2h[1])
-                if exterior_contour and i == 0:
+                    vertices.append(c1[0])
+                    vertices.append(c1[1])
+                    vertices.append(c1h[0])
+                    vertices.append(c1h[1])
+                num_vertices = len(vertices) // 2
+                vertices.append(c2[0])
+                vertices.append(c2[1])
+                vertices.append(c2h[0])
+                vertices.append(c2h[1])
+                if exterior_contour and is_inside:
                     a = num_vertices - 1
                     b = num_vertices - 2
                     c = num_vertices
@@ -359,16 +366,36 @@ class Geometry:
                     b = num_vertices - 1
                     c = num_vertices + 1
                     d = num_vertices
-                ground_indices.append(a)
-                ground_indices.append(b)
-                ground_indices.append(c)
-                ground_indices.append(a)
-                ground_indices.append(c)
-                ground_indices.append(d)
+                indices.append(a)
+                indices.append(b)
+                indices.append(c)
+                indices.append(a)
+                indices.append(c)
+                indices.append(d)
                 is_prev_ground = True
 
+        ground_vertices = []
+        ground_indices = []
+        for i, contour in enumerate(buffs[0]):
+            make_pseudo_3d_ground_for_contour(
+                ground_vertices, ground_indices, contour, i == 0
+            )
         self._pseudo_3d_ground_indexed_vertices = IndexedVertices(
             ground_vertices, ground_indices
+        )
+
+        adjusted_sand_pits = [
+            [adjust_point(c) for c in sand_pit] for sand_pit in sand_pits
+        ]
+
+        sand_pit_vertices = []
+        sand_pit_indices = []
+        for i, sand_pit in enumerate(adjusted_sand_pits):
+            make_pseudo_3d_ground_for_contour(
+                sand_pit_vertices, sand_pit_indices, sand_pit, False
+            )
+        self._sand_pits_3d_ground_indexed_vertices = IndexedVertices(
+            sand_pit_vertices, sand_pit_indices
         )
 
         self._unbuffed_platform_indexed_vertices = (
@@ -393,6 +420,11 @@ class Geometry:
             )
             for i, buff in enumerate(platform_buffers)
         ]
+
+        if sand_pits:
+            self._sand_pits_indexed_vertices = tess.make_indexed_vertices_from_contours(
+                adjusted_sand_pits
+            )
 
         def make_rounded_rectangle_indexed_vertices(rect):
             r = min(rect.width, rect.height) / 4
@@ -480,6 +512,21 @@ class Geometry:
         self._pseudo_3d_ground_indexed_vertices.render(
             single_color_shader.attributes.a_vertex_position
         )
+        if self._sand_pits_indexed_vertices:
+            # pylint: disable-next=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(
+                self._sand_pits_pseudo_3d_ground_color
+            )
+            self._sand_pits_3d_ground_indexed_vertices.render(
+                single_color_shader.attributes.a_vertex_position
+            )
+            # pylint: disable-next=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(
+                self._sand_pits_color
+            )
+            self._sand_pits_indexed_vertices.render(
+                single_color_shader.attributes.a_vertex_position
+            )
         # pylint: disable-next=assigning-non-slot
         single_color_shader.uniforms.u_color = normalize_color(
             self._unbuffed_platform_color
@@ -487,6 +534,11 @@ class Geometry:
         self._unbuffed_platform_indexed_vertices.render(
             single_color_shader.attributes.a_vertex_position
         )
+        for buff, indexed_vertices in self._buffed_platform_indexed_vertices:
+            assert isinstance(buff, ColoredPlatformBuffer)
+            # pylint: disable-next=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(buff.color)
+            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
         if self._is_closed_in:
             rectangles = list(camera.get_view_rect().subtract(self.exterior_rect))
             if len(rectangles) > 0:
@@ -513,15 +565,14 @@ class Geometry:
                 self._dynamic_wall_indexed_vertices.update_part_of_index_buffer(
                     new_indices, 0
                 )
+            # pylint: disable-next=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(
+                self._unbuffed_platform_color
+            )
             self._dynamic_wall_indexed_vertices.render(
                 single_color_shader.attributes.a_vertex_position,
                 num_triangles=len(rectangles) * 2,
             )
-        for buff, indexed_vertices in self._buffed_platform_indexed_vertices:
-            assert isinstance(buff, ColoredPlatformBuffer)
-            # pylint: disable-next=assigning-non-slot
-            single_color_shader.uniforms.u_color = normalize_color(buff.color)
-            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
         single_color_shader.clear()
 
         stripe_shader.use()
@@ -632,7 +683,6 @@ class Geometry:
                 self._dynamic_shot_preview_dotted_line_vertex_buffers,
                 self._dynamic_shot_preview_dotted_line_distance_buffers,
             ):
-                # pylint: disable-next=assigning-non-slot
                 vert_buf.bind_to_attrib(
                     faded_dotted_line_shader.attributes.a_vertex_position
                 )

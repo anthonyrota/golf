@@ -23,7 +23,7 @@ class Camera:
     def update_opengl_matrix(self):
         scale = self.get_scale()
         gl.glScalef(scale, scale, 1)
-        gl.glTranslatef(-self.position.x * scale, -self.position.y * scale, 0.0)
+        gl.glTranslatef(-self.position.x, -self.position.y, 0.0)
 
     def get_view_rect(self):
         return Rectangle(
@@ -37,6 +37,6 @@ class Camera:
 
     def get_aspect(self):
         return self._game.window.height / self._game.window.width
-    
+
     def get_scale(self):
         return self._game.window.width / self.width

@@ -1,15 +1,21 @@
 import math
+from random import choice
 from threading import Thread
 from pyglet.math import Vec2
 from assets import assets
 from Camera import Camera
 from GameScreen import GameScreen
-from cave_gen import make_cave_grid, make_cave_contours, place_start_flat_and_flag_flat
+from cave_gen import (
+    make_cave_grid,
+    make_cave_contours,
+    place_start_flat_and_flag_flat,
+    make_sand_pits,
+)
 from Geometry import Geometry, ColoredPlatformBuffer
 from Physics import Physics
 
 
-def _gen_cave(width, height):
+def _gen_cave(width, height, pseudo_3d_ground_height):
     cave_grid = make_cave_grid(
         width=width,
         height=height,
@@ -21,7 +27,17 @@ def _gen_cave(width, height):
     )
     cave_contours = make_cave_contours(cave_grid, width, height)
     start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
-    return cave_contours, start_flat, flag_flat
+    sand_pits = make_sand_pits(
+        contours=cave_contours,
+        min_sand_pit_area=2,
+        max_sand_pit_area=36,
+        max_sand_pits=choice((2, 3, 3, 3, 3, 4, 5)),
+        avoid_rects=[
+            start_flat.make_rect(pseudo_3d_ground_height),
+            flag_flat.make_rect(pseudo_3d_ground_height),
+        ],
+    )
+    return cave_contours, start_flat, flag_flat, sand_pits
 
 
 class CallbackThread(Thread):
@@ -33,7 +49,7 @@ class CallbackThread(Thread):
         self._cb(self._target(*self._args))
 
 
-class PlayInfiniteScreen(GameScreen):
+class PlayScreen(GameScreen):
     def __init__(self, cave=None):
         self._game = None
         self._geometry = None
@@ -46,19 +62,22 @@ class PlayInfiniteScreen(GameScreen):
     def bind(self, game):
         self._game = game
 
-        width, height = 60, 30
-        cave_contours, start_flat, flag_flat = self._cave or _gen_cave(width, height)
-        thread = CallbackThread(
-            cb=self._on_thread_done,
-            target=_gen_cave,
-            args=(width, height),
-        )
-        thread.start()
         ball_radius = 0.75
         pseudo_3d_ground_height = 1
         shot_preview_simulation_updates = self._game.updates_per_second * 3
         ball_trail_points_per_second = 30
         num_ball_trail_points = ball_trail_points_per_second // 2
+
+        width, height = 60, 30
+        cave_contours, start_flat, flag_flat, sand_pits = self._cave or _gen_cave(
+            width, height, pseudo_3d_ground_height
+        )
+        thread = CallbackThread(
+            cb=self._on_thread_done,
+            target=_gen_cave,
+            args=(width, height, pseudo_3d_ground_height),
+        )
+        thread.start()
 
         self._geometry = Geometry(
             contours=cave_contours[1:],
@@ -78,6 +97,9 @@ class PlayInfiniteScreen(GameScreen):
             pseudo_3d_ground_height=pseudo_3d_ground_height,
             pseudo_3d_ground_color=(68, 255, 15),
             unbuffed_platform_color=(24, 8, 2),
+            sand_pits=sand_pits,
+            sand_pits_color=(212, 139, 33),
+            sand_pits_pseudo_3d_ground_color=(248, 235, 99),
             ball_image=assets().ball_image,
             max_shot_preview_points=shot_preview_simulation_updates + 1,
             shot_preview_lerp_up=0.15,
@@ -94,19 +116,20 @@ class PlayInfiniteScreen(GameScreen):
             ball_trail_base_alpha=0.6,
         )
 
-        def shift_contour(contour):
+        def shift_points(points):
             return [
                 (
                     p[0] + self._geometry.raw_point_shift.x,
                     p[1] + self._geometry.raw_point_shift.y,
                 )
-                for p in contour
+                for p in points
             ]
 
         self._physics = Physics(
             game=self._game,
-            contours=[shift_contour(contour) for contour in cave_contours[1:]],
-            exterior_contour=shift_contour(cave_contours[0]),
+            contours=[shift_points(contour) for contour in cave_contours[1:]],
+            exterior_contour=shift_points(cave_contours[0]),
+            sand_pits=[shift_points(sand_pit) for sand_pit in sand_pits],
             ball_position=start_flat.get_middle()
             + self._geometry.raw_point_shift
             + Vec2(0, ball_radius),
@@ -128,9 +151,13 @@ class PlayInfiniteScreen(GameScreen):
             self._geometry.exterior_rect.width,
             self._geometry.exterior_rect.height / self._camera.get_aspect(),
         )
+        self._camera.position = Vec2(
+            (self._geometry.exterior_rect.width - self._camera.width) / 2,
+            (self._geometry.exterior_rect.height - self._camera.get_height()) / 2,
+        )
         self._geometry.render(camera=self._camera, physics=self._physics)
         if self._level_complete and self._next_cave is not None:
-            self._game.set_screen(PlayInfiniteScreen(cave=self._next_cave))
+            self._game.set_screen(PlayScreen(cave=self._next_cave))
 
     def update(self, dt):
         if self._level_complete:
@@ -140,7 +167,7 @@ class PlayInfiniteScreen(GameScreen):
     def _on_thread_done(self, cave):
         self._next_cave = cave
         if self._level_complete:
-            self._game.set_screen(PlayInfiniteScreen(cave=self._next_cave))
+            self._game.set_screen(PlayScreen(cave=self._next_cave))
 
     def _on_level_complete(self):
         self._level_complete = True

@@ -1,8 +1,7 @@
 import glooey
 from assets import assets
 from GameScreen import GameScreen
-from PlayLevelsScreen import PlayLevelsScreen
-from PlayInfiniteScreen import PlayInfiniteScreen
+from PlayScreen import PlayScreen
 from OptionsScreen import OptionsScreen
 
 
@@ -49,11 +48,8 @@ class MainMenuScreen(GameScreen):
     def bind(self, game):
         self._game = game
 
-        def on_play_levels_button_click(_widget):
-            self._game.set_screen(PlayLevelsScreen())
-
-        def on_play_infinite_button_click(_widget):
-            self._game.set_screen(PlayInfiniteScreen())
+        def on_play_button_click(_widget):
+            self._game.set_screen(PlayScreen())
 
         def on_options_button_click(_widget):
             self._game.set_screen(OptionsScreen())
@@ -64,12 +60,9 @@ class MainMenuScreen(GameScreen):
         self._white_background = WhiteBackground()
         self._game.gui.add(self._white_background)
         self._vbox = NavigationContainer()
-        play_levels_button = NavigationButton("Play Levels")
-        play_levels_button.set_handler("on_click", on_play_levels_button_click)
-        self._vbox.add(play_levels_button)
-        play_infinite_button = NavigationButton("Play Infinite")
-        play_infinite_button.set_handler("on_click", on_play_infinite_button_click)
-        self._vbox.add(play_infinite_button)
+        play_button = NavigationButton("Play")
+        play_button.set_handler("on_click", on_play_button_click)
+        self._vbox.add(play_button)
         options_button = NavigationButton("Options")
         options_button.set_handler("on_click", on_options_button_click)
         self._vbox.add(options_button)
