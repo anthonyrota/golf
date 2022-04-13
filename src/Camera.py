@@ -20,6 +20,9 @@ class Camera:
         )
         return view_matrix
 
+    def screen_position_to_world_position(self, screen_position):
+        return (screen_position).scale(1 / self.get_scale()) + self.position
+
     def update_opengl_matrix(self):
         scale = self.get_scale()
         gl.glScalef(scale, scale, 1)

@@ -14,6 +14,7 @@ import pyshaders
 from Rectangle import Rectangle
 from Tessellator import Tessellator
 from IndexedVertices import Buffer, IndexedVertices
+from Physics import add_sticky_to_stickies
 
 
 BUFFER_RESOLUTION = 8
@@ -171,6 +172,9 @@ class Geometry:
         sand_pits,
         sand_pits_color,
         sand_pits_pseudo_3d_ground_color,
+        sticky_wall_buffer_distance,
+        sticky_wall_preview_color,
+        sticky_wall_color,
         ball_image,
         max_shot_preview_points,
         shot_preview_lerp_up,
@@ -196,6 +200,9 @@ class Geometry:
         self._unbuffed_platform_color = unbuffed_platform_color
         self._sand_pits_color = sand_pits_color
         self._sand_pits_pseudo_3d_ground_color = sand_pits_pseudo_3d_ground_color
+        self._sticky_wall_buffer_distance = sticky_wall_buffer_distance
+        self._sticky_wall_preview_color = sticky_wall_preview_color
+        self._sticky_wall_color = sticky_wall_color
         self._shot_preview_dotted_line_space_size = shot_preview_dotted_line_space_size
         self._shot_preview_dotted_line_dotted_size = (
             shot_preview_dotted_line_dotted_size
@@ -218,6 +225,7 @@ class Geometry:
         self._buffed_platform_indexed_vertices = None
         self._sand_pits_indexed_vertices = None
         self._sand_pits_3d_ground_indexed_vertices = None
+        self._stickies_indexed_vertices = []
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices = None
         self._dynamic_wall_indexed_vertices = None
@@ -228,6 +236,7 @@ class Geometry:
         self._dynamic_ball_trail_polygon_vertex_buffer = None
         self._dynamic_ball_trail_polygon_distance_buffer = None
         self.raw_point_shift = None
+        self._tess = None
         self._make_static_geometry(
             contours=contours,
             exterior_contour=exterior_contour,
@@ -254,13 +263,12 @@ class Geometry:
         sand_pits,
         max_shot_preview_points,
     ):
-
         bounds_buff = (
             max(buff.distance for buff in platform_buffers) + 1
             if exterior_contour
             else 1
         )
-        tess = Tessellator()
+        self._tess = Tessellator()
 
         exterior = list(
             # pylint: disable-next=no-member
@@ -399,7 +407,7 @@ class Geometry:
         )
 
         self._unbuffed_platform_indexed_vertices = (
-            tess.make_indexed_vertices_from_contours(
+            self._tess.make_indexed_vertices_from_contours(
                 [
                     [
                         (self.exterior_rect.pos.x, self.exterior_rect.pos.y),
@@ -416,14 +424,14 @@ class Geometry:
         self._buffed_platform_indexed_vertices = [
             (
                 buff,
-                tess.make_indexed_vertices_from_contours(buffs[i] + buffs[i + 1]),
+                self._tess.make_indexed_vertices_from_contours(buffs[i] + buffs[i + 1]),
             )
             for i, buff in enumerate(platform_buffers)
         ]
 
         if sand_pits:
-            self._sand_pits_indexed_vertices = tess.make_indexed_vertices_from_contours(
-                adjusted_sand_pits
+            self._sand_pits_indexed_vertices = (
+                self._tess.make_indexed_vertices_from_contours(adjusted_sand_pits)
             )
 
         def make_rounded_rectangle_indexed_vertices(rect):
@@ -442,7 +450,7 @@ class Geometry:
                 .buffer(r, BUFFER_RESOLUTION)
             )
             assert isinstance(shape, Polygon)
-            return tess.make_indexed_vertices_from_contours(
+            return self._tess.make_indexed_vertices_from_contours(
                 # pylint: disable-next=no-member
                 [list(shape.exterior.coords)]
             )
@@ -490,7 +498,43 @@ class Geometry:
             [0] * self._num_ball_trail_points * 2, 1, "float", is_dynamic=True
         )
 
-        tess.dispose()
+    def _make_sticky_indexed_vertices(self, sticky):
+        shape = LineString(sticky.wall).buffer(
+            -self._sticky_wall_buffer_distance
+            if sticky.is_exterior
+            else self._sticky_wall_buffer_distance,
+            single_sided=True,
+            resolution=BUFFER_RESOLUTION,
+        )
+        if not sticky.is_exterior:
+            shape = shape.intersection(Polygon(sticky.contour))
+        assert not shape.is_empty
+        contours = []
+        if isinstance(shape, Polygon):
+            contours.append(shape.exterior.coords)
+        elif isinstance(shape, MultiPolygon):
+            assert isinstance(shape, MultiPolygon)
+            # pylint: disable-next=no-member
+            for poly in shape.geoms:
+                assert isinstance(poly, Polygon)
+                contours.append(poly.exterior.coords)
+        return self._tess.make_indexed_vertices_from_contours(contours)
+
+    def add_sticky(self, sticky):
+        self._stickies_indexed_vertices.append(
+            (sticky, self._make_sticky_indexed_vertices(sticky))
+        )
+
+    def remove_sticky(self, sticky):
+        for i, (existing_sticky, existing_sticky_indexed_vertices) in enumerate(
+            self._stickies_indexed_vertices
+        ):
+            if sticky == existing_sticky:
+                self._stickies_indexed_vertices.pop(i)
+                existing_sticky_indexed_vertices.dispose()
+                break
+        else:
+            raise Exception("Tried removing a sticky that does not exist.")
 
     def render(self, camera, physics):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT)
@@ -572,6 +616,22 @@ class Geometry:
             self._dynamic_wall_indexed_vertices.render(
                 single_color_shader.attributes.a_vertex_position,
                 num_triangles=len(rectangles) * 2,
+            )
+        sticky = physics.get_preview_sticky()
+        if sticky:
+            joined_sticky = add_sticky_to_stickies(physics.existing_stickies, sticky)[1]
+            # pylint: disable-next=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(
+                self._sticky_wall_preview_color
+            )
+            indexed_vertices = self._make_sticky_indexed_vertices(joined_sticky)
+            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
+            indexed_vertices.dispose()
+        # pylint: disable-next=assigning-non-slot
+        single_color_shader.uniforms.u_color = normalize_color(self._sticky_wall_color)
+        for _, sticky_indexed_vertices in self._stickies_indexed_vertices:
+            sticky_indexed_vertices.render(
+                single_color_shader.attributes.a_vertex_position
             )
         single_color_shader.clear()
 
@@ -779,3 +839,16 @@ class Geometry:
         self._dynamic_shot_preview_dotted_line_distance_buffers = None
         self._dynamic_shot_preview_polygon_vertex_buffer.dispose()
         self._dynamic_shot_preview_polygon_distance_buffer.dispose()
+        for _, indexed_vertices in self._stickies_indexed_vertices:
+            indexed_vertices.dispose()
+        self._stickies_indexed_vertices = None
+        self._dynamic_ball_trail_polygon_vertex_buffer.dispose()
+        self._dynamic_ball_trail_polygon_vertex_buffer = None
+        self._dynamic_ball_trail_polygon_distance_buffer.dispose()
+        self._dynamic_ball_trail_polygon_distance_buffer = None
+        self._sand_pits_3d_ground_indexed_vertices.dispose()
+        self._sand_pits_3d_ground_indexed_vertices = None
+        self._sand_pits_indexed_vertices.dispose()
+        self._sand_pits_indexed_vertices = None
+        self._tess.dispose()
+        self._tess = None

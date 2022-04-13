@@ -50,7 +50,7 @@ class Tessellator:
             self._tess_error_cb,
         )
 
-    def make_indexed_vertices_from_contours(self, contours):
+    def make_vertices_and_indices_from_contours(self, contours):
         self._vertices = []
         self._indices = []
         data = [(gl.GLdouble * 3 * len(contour))(*contour) for contour in contours]
@@ -63,10 +63,14 @@ class Tessellator:
             gl.gluTessEndContour(self._tess)
         gl.gluTessEndPolygon(self._tess)
 
-        indexed_vertices = IndexedVertices(self._vertices, self._indices)
+        vertices, indices = (self._vertices, self._indices)
         self._vertices = None
         self._indices = None
-        return indexed_vertices
+        return vertices, indices
+
+    def make_indexed_vertices_from_contours(self, contours):
+        vertices, indices = self.make_vertices_and_indices_from_contours(contours)
+        return IndexedVertices(vertices, indices)
 
     def dispose(self):
         gl.gluDeleteTess(self._tess)

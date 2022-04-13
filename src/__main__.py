@@ -9,6 +9,6 @@ if __name__ == "__main__":
     game = Game(
         screen=MainMenuScreen(),
         updates_per_second=config().updates_per_second,
-        target_fps=60,
+        target_fps=config().target_fps,
     )
     game.run()

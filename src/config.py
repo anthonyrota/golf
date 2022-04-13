@@ -1,6 +1,11 @@
+from pyglet.window import key
+
+
 class _Config:
     def __init__(self):
         self.updates_per_second = 240
+        self.target_fps = 60
+        self.place_sticky_mode_key = key.G
 
 
 _config = None

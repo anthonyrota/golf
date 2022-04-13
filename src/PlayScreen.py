@@ -62,8 +62,8 @@ class PlayScreen(GameScreen):
     def bind(self, game):
         self._game = game
 
-        ball_radius = 0.75
-        pseudo_3d_ground_height = 1
+        ball_radius = 0.7
+        pseudo_3d_ground_height = 0.8
         shot_preview_simulation_updates = self._game.updates_per_second * 3
         ball_trail_points_per_second = 30
         num_ball_trail_points = ball_trail_points_per_second // 2
@@ -90,8 +90,7 @@ class PlayScreen(GameScreen):
             flag_ground_stripe_width=1,
             flag_ground_stripe_angle=math.pi / 4,
             platform_buffers=[
-                ColoredPlatformBuffer(distance=0.2, color=(68, 255, 15)),
-                ColoredPlatformBuffer(distance=2, color=(46, 197, 0)),
+                ColoredPlatformBuffer(distance=1.5, color=(46, 197, 0)),
                 ColoredPlatformBuffer(distance=6.5, color=(55, 30, 11)),
             ],
             pseudo_3d_ground_height=pseudo_3d_ground_height,
@@ -100,6 +99,9 @@ class PlayScreen(GameScreen):
             sand_pits=sand_pits,
             sand_pits_color=(212, 139, 33),
             sand_pits_pseudo_3d_ground_color=(248, 235, 99),
+            sticky_wall_buffer_distance=1,
+            sticky_wall_preview_color=(276, 168, 274),
+            sticky_wall_color=(236, 103, 234),
             ball_image=assets().ball_image,
             max_shot_preview_points=shot_preview_simulation_updates + 1,
             shot_preview_lerp_up=0.15,
@@ -125,8 +127,10 @@ class PlayScreen(GameScreen):
                 for p in points
             ]
 
+        self._camera = Camera(self._game)
         self._physics = Physics(
             game=self._game,
+            camera=self._camera,
             contours=[shift_points(contour) for contour in cave_contours[1:]],
             exterior_contour=shift_points(cave_contours[0]),
             sand_pits=[shift_points(sand_pit) for sand_pit in sand_pits],
@@ -142,9 +146,11 @@ class PlayScreen(GameScreen):
             // ball_trail_points_per_second,
             num_ball_trail_points=num_ball_trail_points,
             ball_trail_width=ball_radius / 2,
+            sticky_radius=6,
+            on_new_sticky=self._geometry.add_sticky,
+            on_sticky_removed=self._geometry.remove_sticky,
             on_level_complete=self._on_level_complete,
         )
-        self._camera = Camera(self._game)
 
     def render(self):
         self._camera.width = max(
