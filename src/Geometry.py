@@ -414,20 +414,6 @@ class Geometry:
             ground_vertices, ground_indices
         )
 
-        adjusted_sand_pits = [
-            [adjust_point(c) for c in sand_pit] for sand_pit in sand_pits
-        ]
-
-        sand_pit_vertices = []
-        sand_pit_indices = []
-        for i, sand_pit in enumerate(adjusted_sand_pits):
-            make_pseudo_3d_ground_for_contour(
-                sand_pit_vertices, sand_pit_indices, sand_pit, False
-            )
-        self._sand_pits_3d_ground_indexed_vertices = IndexedVertices(
-            sand_pit_vertices, sand_pit_indices
-        )
-
         self._unbuffed_platform_indexed_vertices = (
             self._tess.make_indexed_vertices_from_contours(
                 [
@@ -452,6 +438,18 @@ class Geometry:
         ]
 
         if sand_pits:
+            adjusted_sand_pits = [
+                [adjust_point(c) for c in sand_pit] for sand_pit in sand_pits
+            ]
+            sand_pit_pseudo_vertices = []
+            sand_pit_pseudo_indices = []
+            for i, sand_pit in enumerate(adjusted_sand_pits):
+                make_pseudo_3d_ground_for_contour(
+                    sand_pit_pseudo_vertices, sand_pit_pseudo_indices, sand_pit, False
+                )
+            self._sand_pits_3d_ground_indexed_vertices = IndexedVertices(
+                sand_pit_pseudo_vertices, sand_pit_pseudo_indices
+            )
             self._sand_pits_indexed_vertices = (
                 self._tess.make_indexed_vertices_from_contours(adjusted_sand_pits)
             )
