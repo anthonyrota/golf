@@ -18,6 +18,7 @@ from Physics import add_sticky_to_stickies
 
 
 BUFFER_RESOLUTION = 8
+DRAWBACK_CIRCLE_POINTS = 64
 
 
 single_color_shader = pyshaders.from_string(
@@ -31,9 +32,10 @@ void main() {
     ],
     [
         """uniform vec3 u_color;
+uniform float u_alpha;
 
 void main() {
-    gl_FragColor = vec4(u_color, 1.0);
+    gl_FragColor = vec4(u_color, u_alpha);
 }"""
     ],
 )
@@ -194,6 +196,11 @@ class Geometry:
         shot_preview_dotted_line_fade_factor,
         shot_preview_polygon_color,
         shot_preview_base_alpha,
+        shot_drawback_ring_width,
+        shot_drawback_outer_ring_color,
+        shot_drawback_outer_ring_alpha,
+        shot_drawback_inner_ring_color,
+        shot_drawback_inner_ring_alpha,
         num_ball_trail_points,
         ball_trail_color,
         ball_trail_fade_factor,
@@ -235,6 +242,11 @@ class Geometry:
         self._shot_preview_fade_factor = shot_preview_dotted_line_fade_factor
         self._shot_preview_polygon_color = shot_preview_polygon_color
         self._shot_preview_base_alpha = shot_preview_base_alpha
+        self._shot_drawback_ring_width = shot_drawback_ring_width
+        self._shot_drawback_outer_ring_color = shot_drawback_outer_ring_color
+        self._shot_drawback_outer_ring_alpha = shot_drawback_outer_ring_alpha
+        self._shot_drawback_inner_ring_color = shot_drawback_inner_ring_color
+        self._shot_drawback_inner_ring_alpha = shot_drawback_inner_ring_alpha
         self._num_ball_trail_points = num_ball_trail_points
         self._ball_trail_color = ball_trail_color
         self._ball_trail_fade_factor = ball_trail_fade_factor
@@ -255,6 +267,8 @@ class Geometry:
         self._dynamic_shot_preview_dotted_line_distance_buffers = None
         self._dynamic_shot_preview_polygon_vertex_buffer = None
         self._dynamic_shot_preview_polygon_distance_buffer = None
+        self._dynamic_drawback_circle_outer_ring_vertex_buffer = None
+        self._dynamic_drawback_circle_inner_ring_vertex_buffer = None
         self._dynamic_ball_trail_polygon_vertex_buffer = None
         self._dynamic_ball_trail_polygon_distance_buffer = None
         self.raw_point_shift = None
@@ -511,6 +525,12 @@ class Geometry:
         self._dynamic_shot_preview_polygon_distance_buffer = Buffer(
             [0] * max_shot_preview_points * 2, 1, "float", is_dynamic=True
         )
+        self._dynamic_drawback_circle_outer_ring_vertex_buffer = Buffer(
+            [0] * (DRAWBACK_CIRCLE_POINTS + 1) * 4, 2, "float", is_dynamic=True
+        )
+        self._dynamic_drawback_circle_inner_ring_vertex_buffer = Buffer(
+            [0] * (DRAWBACK_CIRCLE_POINTS + 1) * 4, 2, "float", is_dynamic=True
+        )
         self._dynamic_ball_trail_polygon_vertex_buffer = Buffer(
             [0] * self._num_ball_trail_points * 4, 2, "float", is_dynamic=True
         )
@@ -585,6 +605,7 @@ class Geometry:
         single_color_shader.use()
         # pylint: disable=assigning-non-slot
         single_color_shader.uniforms.u_view_matrix = view_matrix
+        single_color_shader.uniforms.u_alpha = 1
         single_color_shader.uniforms.u_color = normalize_color(
             self._pseudo_3d_ground_color
         )
@@ -742,6 +763,31 @@ class Geometry:
             ].update_part(distances, 0)
             return vertices, distances, distance
 
+        def make_circle(centre, radius, num_points):
+            points = []
+            for i in range(num_points):
+                angle = i / num_points * 2 * math.pi
+                points.append(
+                    (
+                        centre[0] + radius * math.cos(angle),
+                        centre[1] + radius * math.sin(angle),
+                    )
+                )
+            return points
+
+        def make_ring_vertices_from_circles(inner_circle, outer_circle):
+            vertices = []
+            for inner_point, outer_point in zip(inner_circle, outer_circle):
+                vertices.append(inner_point[0])
+                vertices.append(inner_point[1])
+                vertices.append(outer_point[0])
+                vertices.append(outer_point[1])
+            vertices.append(inner_circle[0][0])
+            vertices.append(inner_circle[0][1])
+            vertices.append(outer_circle[0][0])
+            vertices.append(outer_circle[0][1])
+            return vertices
+
         if physics.is_dragging:
             drag_velocity = physics.get_drag_velocity()
             vel_y_sign = 1 if drag_velocity.y > 0 else -1
@@ -775,17 +821,43 @@ class Geometry:
                 polygon_verts.append(verts2[i * 2 + 1])
                 polygon_dists.append(d1)
                 polygon_dists.append(d2)
+            drag_start = camera.screen_position_to_world_position(
+                physics.get_drag_start()
+            )
+            drag_current = camera.screen_position_to_world_position(
+                physics.get_drag_current()
+            )
+            inner_radius = abs(drag_current - drag_start)
+            circle_a = make_circle(drag_start, inner_radius, DRAWBACK_CIRCLE_POINTS)
+            circle_b = make_circle(
+                drag_start,
+                inner_radius + self._shot_drawback_ring_width,
+                DRAWBACK_CIRCLE_POINTS,
+            )
+            circle_c = make_circle(
+                drag_start,
+                inner_radius + 2 * self._shot_drawback_ring_width,
+                DRAWBACK_CIRCLE_POINTS,
+            )
+            inner_ring_vertices = make_ring_vertices_from_circles(circle_a, circle_b)
+            outer_ring_vertices = make_ring_vertices_from_circles(circle_b, circle_c)
             self._dynamic_shot_preview_polygon_vertex_buffer.update_part(
                 polygon_verts, 0
             )
             self._dynamic_shot_preview_polygon_distance_buffer.update_part(
                 polygon_dists, 0
             )
+            self._dynamic_drawback_circle_inner_ring_vertex_buffer.update_part(
+                inner_ring_vertices, 0
+            )
+            self._dynamic_drawback_circle_outer_ring_vertex_buffer.update_part(
+                outer_ring_vertices, 0
+            )
 
             faded_dotted_line_shader.use()
             # pylint: disable=assigning-non-slot
             faded_dotted_line_shader.uniforms.u_view_matrix = view_matrix
-            faded_dotted_line_shader.uniforms.u_color = (
+            faded_dotted_line_shader.uniforms.u_color = normalize_color(
                 self._shot_preview_dotted_line_color
             )
             faded_dotted_line_shader.uniforms.u_fade_factor = (
@@ -814,7 +886,9 @@ class Geometry:
             faded_color_shader.use()
             # pylint: disable=assigning-non-slot
             faded_color_shader.uniforms.u_view_matrix = view_matrix
-            faded_color_shader.uniforms.u_color = self._shot_preview_polygon_color
+            faded_color_shader.uniforms.u_color = normalize_color(
+                self._shot_preview_polygon_color
+            )
             faded_color_shader.uniforms.u_fade_factor = self._shot_preview_fade_factor
             faded_color_shader.uniforms.u_base_alpha = self._shot_preview_base_alpha
             faded_color_shader.uniforms.u_line_length = dist
@@ -827,6 +901,29 @@ class Geometry:
             )
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, len(path1) * 2)
             faded_color_shader.clear()
+
+            single_color_shader.use()
+            # pylint: disable=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(
+                self._shot_drawback_outer_ring_color
+            )
+            single_color_shader.uniforms.u_alpha = self._shot_drawback_outer_ring_alpha
+            # pylint: enable=assigning-non-slot
+            self._dynamic_drawback_circle_outer_ring_vertex_buffer.bind_to_attrib(
+                single_color_shader.attributes.a_vertex_position
+            )
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, (DRAWBACK_CIRCLE_POINTS + 1) * 2)
+            # pylint: disable=assigning-non-slot
+            single_color_shader.uniforms.u_color = normalize_color(
+                self._shot_drawback_inner_ring_color
+            )
+            single_color_shader.uniforms.u_alpha = self._shot_drawback_inner_ring_alpha
+            # pylint: enable=assigning-non-slot
+            self._dynamic_drawback_circle_inner_ring_vertex_buffer.bind_to_attrib(
+                single_color_shader.attributes.a_vertex_position
+            )
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, (DRAWBACK_CIRCLE_POINTS + 1) * 2)
+            single_color_shader.clear()
 
         trail = physics.get_ball_trail()
         if len(trail) > 1:
@@ -848,7 +945,9 @@ class Geometry:
             faded_color_shader.use()
             # pylint: disable=assigning-non-slot
             faded_color_shader.uniforms.u_view_matrix = view_matrix
-            faded_color_shader.uniforms.u_color = self._ball_trail_color
+            faded_color_shader.uniforms.u_color = normalize_color(
+                self._ball_trail_color
+            )
             faded_color_shader.uniforms.u_fade_factor = self._ball_trail_fade_factor
             faded_color_shader.uniforms.u_base_alpha = self._ball_trail_base_alpha
             faded_color_shader.uniforms.u_line_length = 1.0
@@ -900,6 +999,10 @@ class Geometry:
         self._dynamic_shot_preview_dotted_line_distance_buffers = None
         self._dynamic_shot_preview_polygon_vertex_buffer.dispose()
         self._dynamic_shot_preview_polygon_distance_buffer.dispose()
+        self._dynamic_drawback_circle_outer_ring_vertex_buffer.dispose()
+        self._dynamic_drawback_circle_outer_ring_vertex_buffer = None
+        self._dynamic_drawback_circle_inner_ring_vertex_buffer.dispose()
+        self._dynamic_drawback_circle_inner_ring_vertex_buffer = None
         for _, indexed_vertices in self._stickies_indexed_vertices:
             indexed_vertices.dispose()
         self._stickies_indexed_vertices = None

@@ -292,6 +292,16 @@ class Physics:
             return vel.normalize().scale(self._max_power)
         return vel
 
+    def get_drag_start(self):
+        return self._mouse_dragging.start
+
+    def get_drag_current(self):
+        delta = self._mouse_dragging.current - self._mouse_dragging.start
+        max_mag = self._max_power / self._shot_sensitivity
+        if delta.dot(delta) > max_mag ** 2:
+            return self._mouse_dragging.start + delta.normalize().scale(max_mag)
+        return self._mouse_dragging.current
+
     def simulate_ball_path_from_position_with_velocity(self, position, velocity):
         space = pymunk.Space()
         space.gravity = self._gravity
@@ -472,11 +482,6 @@ class Physics:
                 else:
                     self._mouse_dragging.state = _MouseDraggingState.RELEASED
 
-        def on_mouse_leave(_x, _y):
-            if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
-                return
-            self._mouse_dragging = None
-
         def on_key_release(symbol, modifiers):
             if (
                 modifiers & key.MOD_SHIFT
@@ -508,7 +513,6 @@ class Physics:
             on_mouse_press,
             on_mouse_drag,
             on_mouse_release,
-            on_mouse_leave,
             on_key_release,
             on_mouse_motion,
         )
