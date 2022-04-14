@@ -421,7 +421,8 @@ class Physics:
 
         def on_mouse_release(_x, _y, buttons, _modifiers):
             if (
-                self._mode.state == _ModeState.PLACE_STICKY
+                buttons & pyglet.window.mouse.LEFT
+                and self._mode.state == _ModeState.PLACE_STICKY
                 and self._mode.mouse_pos is not None
             ):
                 sticky = self._get_closest_sticky_in_radius_of_position(
