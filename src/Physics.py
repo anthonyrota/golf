@@ -132,6 +132,8 @@ class Physics:
         sand_pits,
         ball_position,
         ball_radius,
+        max_power,
+        shot_sensitivity,
         gravity,
         flag_position,
         flag_collision_shape_radius,
@@ -153,6 +155,8 @@ class Physics:
         self._elasticity = 0.65
         self._sand_friction = 1
         self._sand_elasticity = 0
+        self._max_power = max_power
+        self._shot_sensitivity = shot_sensitivity
         self._gravity = gravity
         self._flag_position = flag_position
         self._mouse_dragging = None
@@ -280,7 +284,12 @@ class Physics:
             self._updates_until_new_ball_trail_point -= 1
 
     def get_drag_velocity(self):
-        return self._mouse_dragging.start - self._mouse_dragging.current
+        vel = (self._mouse_dragging.start - self._mouse_dragging.current).scale(
+            self._shot_sensitivity
+        )
+        if vel.dot(vel) > self._max_power ** 2:
+            return vel.normalize().scale(self._max_power)
+        return vel
 
     def simulate_ball_path_from_position_with_velocity(self, position, velocity):
         space = pymunk.Space()

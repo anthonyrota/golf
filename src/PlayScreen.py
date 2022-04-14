@@ -147,6 +147,8 @@ class PlayScreen(GameScreen):
             + self._geometry.raw_point_shift
             + Vec2(0, ball_radius),
             ball_radius=ball_radius,
+            max_power=50,
+            shot_sensitivity=0.4,
             gravity=Vec2(0, -30),
             flag_position=flag_flat.get_middle() + self._geometry.raw_point_shift,
             flag_collision_shape_radius=1,
