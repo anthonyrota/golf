@@ -230,6 +230,7 @@ class Physics:
         self._space.gravity = (0, 0)
         self._ball_shape.body.velocity = (0, 0)
         self._ball_shape.body.angular_velocity = 0
+        return True
 
     def _make_ball_shape(self, position):
         mass = 1
@@ -412,12 +413,13 @@ class Physics:
         def on_mouse_drag(x, y, _dx, _dy, buttons, _modifiers):
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
-            if buttons & pyglet.window.mouse.LEFT:
-                if not self._mouse_dragging:
-                    self._mouse_dragging = _MouseDragging(Vec2(x, y))
-                if self._mouse_dragging.state != _MouseDraggingState.RELEASED:
-                    self._mouse_dragging.current = Vec2(x, y)
-                    self._mouse_dragging.state = _MouseDraggingState.DRAGGING
+            if (
+                buttons & pyglet.window.mouse.LEFT
+                and self._mouse_dragging
+                and self._mouse_dragging.state != _MouseDraggingState.RELEASED
+            ):
+                self._mouse_dragging.current = Vec2(x, y)
+                self._mouse_dragging.state = _MouseDraggingState.DRAGGING
 
         def on_mouse_release(_x, _y, buttons, _modifiers):
             if (
@@ -470,11 +472,15 @@ class Physics:
                 or modifiers & key.MOD_OPTION
             ):
                 return
-            if symbol == config().place_sticky_mode_key:
+            if symbol in config().place_sticky_mode_keys:
                 if self._mode.state == _ModeState.PLACE_STICKY:
                     self._mode = _MakeShotMode()
                 else:
                     self._mode = _PlaceStickyMode()
+                    self._mouse_dragging = None
+            elif symbol in config().cancel_shot_keys:
+                if self._mode.state == _ModeState.MAKE_SHOT:
+                    self._mouse_dragging = None
 
         def on_mouse_motion(x, y, _dx, _dy):
             if self._mode.state != _ModeState.PLACE_STICKY:
