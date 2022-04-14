@@ -160,6 +160,7 @@ class Physics:
         self._gravity = gravity
         self._flag_position = flag_position
         self._mouse_dragging = None
+        self._canceled_shot = False
         self._shot_preview_simulation_updates = shot_preview_simulation_updates
         self._shot_number = 0
         self._updates_per_new_ball_trail_point = updates_per_new_ball_trail_point
@@ -417,18 +418,22 @@ class Physics:
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT:
+                self._canceled_shot = False
                 self._mouse_dragging = _MouseDragging(Vec2(x, y))
 
         def on_mouse_drag(x, y, _dx, _dy, buttons, _modifiers):
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
-            if (
-                buttons & pyglet.window.mouse.LEFT
-                and self._mouse_dragging
-                and self._mouse_dragging.state != _MouseDraggingState.RELEASED
-            ):
-                self._mouse_dragging.current = Vec2(x, y)
-                self._mouse_dragging.state = _MouseDraggingState.DRAGGING
+            if buttons & pyglet.window.mouse.LEFT:
+                if not self._mouse_dragging and not self._canceled_shot:
+                    self._mouse_dragging = _MouseDragging(Vec2(x, y))
+                    self._mouse_dragging.state = _MouseDraggingState.DRAGGING
+                elif (
+                    self._mouse_dragging
+                    and self._mouse_dragging.state != _MouseDraggingState.RELEASED
+                ):
+                    self._mouse_dragging.current = Vec2(x, y)
+                    self._mouse_dragging.state = _MouseDraggingState.DRAGGING
 
         def on_mouse_release(_x, _y, buttons, _modifiers):
             if (
@@ -483,12 +488,15 @@ class Physics:
                 return
             if symbol in config().place_sticky_mode_keys:
                 if self._mode.state == _ModeState.PLACE_STICKY:
+                    self._canceled_shot = False
                     self._mode = _MakeShotMode()
                 else:
+                    self._canceled_shot = False
                     self._mode = _PlaceStickyMode()
                     self._mouse_dragging = None
             elif symbol in config().cancel_shot_keys:
                 if self._mode.state == _ModeState.MAKE_SHOT:
+                    self._canceled_shot = True
                     self._mouse_dragging = None
 
         def on_mouse_motion(x, y, _dx, _dy):
