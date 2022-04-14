@@ -173,8 +173,17 @@ class Geometry:
         sand_pits_color,
         sand_pits_pseudo_3d_ground_color,
         sticky_wall_buffer_distance,
-        sticky_wall_preview_color,
-        sticky_wall_color,
+        sticky_wall_outer_buffer_distance,
+        sticky_wall_background_color,
+        sticky_wall_stripe_color,
+        sticky_wall_background_width,
+        sticky_wall_stripe_width,
+        sticky_wall_stripe_angle,
+        preview_sticky_wall_background_color,
+        preview_sticky_wall_stripe_color,
+        preview_sticky_wall_background_width,
+        preview_sticky_wall_stripe_width,
+        preview_sticky_wall_stripe_angle,
         ball_image,
         max_shot_preview_points,
         shot_preview_lerp_up,
@@ -201,8 +210,21 @@ class Geometry:
         self._sand_pits_color = sand_pits_color
         self._sand_pits_pseudo_3d_ground_color = sand_pits_pseudo_3d_ground_color
         self._sticky_wall_buffer_distance = sticky_wall_buffer_distance
-        self._sticky_wall_preview_color = sticky_wall_preview_color
-        self._sticky_wall_color = sticky_wall_color
+        self._sticky_wall_outer_buffer_distance = sticky_wall_outer_buffer_distance
+        self._sticky_wall_background_color = sticky_wall_background_color
+        self._sticky_wall_stripe_color = sticky_wall_stripe_color
+        self._sticky_wall_background_width = sticky_wall_background_width
+        self._sticky_wall_stripe_width = sticky_wall_stripe_width
+        self._sticky_wall_stripe_angle = sticky_wall_stripe_angle
+        self._preview_sticky_wall_background_color = (
+            preview_sticky_wall_background_color
+        )
+        self._preview_sticky_wall_stripe_color = preview_sticky_wall_stripe_color
+        self._preview_sticky_wall_background_width = (
+            preview_sticky_wall_background_width
+        )
+        self._preview_sticky_wall_stripe_width = preview_sticky_wall_stripe_width
+        self._preview_sticky_wall_stripe_angle = preview_sticky_wall_stripe_angle
         self._shot_preview_dotted_line_space_size = shot_preview_dotted_line_space_size
         self._shot_preview_dotted_line_dotted_size = (
             shot_preview_dotted_line_dotted_size
@@ -499,25 +521,41 @@ class Geometry:
         )
 
     def _make_sticky_indexed_vertices(self, sticky):
-        shape = LineString(sticky.wall).buffer(
-            -self._sticky_wall_buffer_distance
-            if sticky.is_exterior
-            else self._sticky_wall_buffer_distance,
-            single_sided=True,
-            resolution=BUFFER_RESOLUTION,
+        r = self._sticky_wall_buffer_distance / 2.1
+        shape = (
+            LineString(sticky.wall)
+            .buffer(
+                -self._sticky_wall_buffer_distance
+                if sticky.is_exterior
+                else self._sticky_wall_buffer_distance,
+                single_sided=True,
+                resolution=BUFFER_RESOLUTION,
+            )
+            .buffer(r, BUFFER_RESOLUTION)
+            .buffer(-2 * r, BUFFER_RESOLUTION)
+            .buffer(r, BUFFER_RESOLUTION)
         )
         if not sticky.is_exterior:
             shape = shape.intersection(Polygon(sticky.contour))
+        shape = shape.buffer(
+            self._sticky_wall_outer_buffer_distance, resolution=BUFFER_RESOLUTION
+        )
         assert not shape.is_empty
         contours = []
         if isinstance(shape, Polygon):
             contours.append(shape.exterior.coords)
+            if len(shape.interiors) > 0:
+                for interior in shape.interiors:
+                    contours.append(interior.coords)
         elif isinstance(shape, MultiPolygon):
             assert isinstance(shape, MultiPolygon)
             # pylint: disable-next=no-member
             for poly in shape.geoms:
                 assert isinstance(poly, Polygon)
                 contours.append(poly.exterior.coords)
+                if len(poly.interiors) > 0:
+                    for interior in poly.interiors:
+                        contours.append(interior.coords)
         return self._tess.make_indexed_vertices_from_contours(contours)
 
     def add_sticky(self, sticky):
@@ -617,32 +655,15 @@ class Geometry:
                 single_color_shader.attributes.a_vertex_position,
                 num_triangles=len(rectangles) * 2,
             )
-        sticky = physics.get_preview_sticky()
-        if sticky:
-            joined_sticky = add_sticky_to_stickies(physics.existing_stickies, sticky)[1]
-            # pylint: disable-next=assigning-non-slot
-            single_color_shader.uniforms.u_color = normalize_color(
-                self._sticky_wall_preview_color
-            )
-            indexed_vertices = self._make_sticky_indexed_vertices(joined_sticky)
-            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
-            indexed_vertices.dispose()
-        # pylint: disable-next=assigning-non-slot
-        single_color_shader.uniforms.u_color = normalize_color(self._sticky_wall_color)
-        for _, sticky_indexed_vertices in self._stickies_indexed_vertices:
-            sticky_indexed_vertices.render(
-                single_color_shader.attributes.a_vertex_position
-            )
         single_color_shader.clear()
+
+        def make_stripe_line(angle):
+            return (math.sin(angle), -math.cos(angle), 0)
 
         stripe_shader.use()
         # pylint: disable=assigning-non-slot
         stripe_shader.uniforms.u_view_matrix = view_matrix
-        stripe_shader.uniforms.u_line = (
-            math.sin(self._flag_ground_stripe_angle),
-            -math.cos(self._flag_ground_stripe_angle),
-            0,
-        )
+        stripe_shader.uniforms.u_line = make_stripe_line(self._flag_ground_stripe_angle)
         stripe_shader.uniforms.u_background_color = normalize_color(
             self._flag_ground_background_color
         )
@@ -658,6 +679,48 @@ class Geometry:
         self._flag_flat_indexed_vertices.render(
             stripe_shader.attributes.a_vertex_position
         )
+        sticky = physics.get_preview_sticky()
+        if sticky:
+            joined_sticky = add_sticky_to_stickies(physics.existing_stickies, sticky)[1]
+            indexed_vertices = self._make_sticky_indexed_vertices(joined_sticky)
+            # pylint: disable=assigning-non-slot
+            stripe_shader.uniforms.u_view_matrix = view_matrix
+            stripe_shader.uniforms.u_line = make_stripe_line(
+                self._preview_sticky_wall_stripe_angle
+            )
+            stripe_shader.uniforms.u_background_color = normalize_color(
+                self._preview_sticky_wall_background_color
+            )
+            stripe_shader.uniforms.u_stripe_color = normalize_color(
+                self._preview_sticky_wall_stripe_color
+            )
+            stripe_shader.uniforms.u_background_width = (
+                self._preview_sticky_wall_background_width
+            )
+            stripe_shader.uniforms.u_stripe_width = (
+                self._preview_sticky_wall_stripe_width
+            )
+            # pylint: enable=assigning-non-slot
+            indexed_vertices.render(stripe_shader.attributes.a_vertex_position)
+            indexed_vertices.dispose()
+        for _, sticky_indexed_vertices in self._stickies_indexed_vertices:
+            # pylint: disable=assigning-non-slot
+            stripe_shader.uniforms.u_view_matrix = view_matrix
+            stripe_shader.uniforms.u_line = make_stripe_line(
+                self._sticky_wall_stripe_angle
+            )
+            stripe_shader.uniforms.u_background_color = normalize_color(
+                self._sticky_wall_background_color
+            )
+            stripe_shader.uniforms.u_stripe_color = normalize_color(
+                self._sticky_wall_stripe_color
+            )
+            stripe_shader.uniforms.u_background_width = (
+                self._sticky_wall_background_width
+            )
+            stripe_shader.uniforms.u_stripe_width = self._sticky_wall_stripe_width
+            # pylint: enable=assigning-non-slot
+            sticky_indexed_vertices.render(stripe_shader.attributes.a_vertex_position)
         stripe_shader.clear()
 
         def update_dynamic_shot_preview_dotted_line_buffers(num_buffer, path):

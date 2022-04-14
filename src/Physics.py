@@ -226,17 +226,10 @@ class Physics:
         self._on_level_complete()
         return False
 
-    def _on_ball_sticky_collision(self, arb, _space, _data):
-        _, sticky_wall = arb.shapes
-        wall = sticky_wall.b - sticky_wall.a
-        n = (-wall.y, wall.x)
-        if self._ball_shape.body.velocity.dot(n) <= 0:
-            # Ball is going into the wall.
-            self._space.gravity = (0, 0)
-            self._ball_shape.body.velocity = (0, 0)
-            self._ball_shape.body.angular_velocity = 0
-            return False
-        return True
+    def _on_ball_sticky_collision(self, _arb, _space, _data):
+        self._space.gravity = (0, 0)
+        self._ball_shape.body.velocity = (0, 0)
+        self._ball_shape.body.angular_velocity = 0
 
     def _make_ball_shape(self, position):
         mass = 1
@@ -453,6 +446,7 @@ class Physics:
                     for removed_sticky in removed_stickies:
                         self._on_sticky_removed(removed_sticky)
                     self._on_new_sticky(new_sticky)
+                    self._mode = _MakeShotMode()
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT and self._mouse_dragging:

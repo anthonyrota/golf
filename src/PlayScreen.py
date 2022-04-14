@@ -63,7 +63,7 @@ class PlayScreen(GameScreen):
         self._game = game
 
         ball_radius = 0.7
-        pseudo_3d_ground_height = 0.8
+        pseudo_3d_ground_height = 0.6
         shot_preview_simulation_updates = self._game.updates_per_second * 3
         ball_trail_points_per_second = 30
         num_ball_trail_points = ball_trail_points_per_second // 2
@@ -99,9 +99,18 @@ class PlayScreen(GameScreen):
             sand_pits=sand_pits,
             sand_pits_color=(212, 139, 33),
             sand_pits_pseudo_3d_ground_color=(248, 235, 99),
-            sticky_wall_buffer_distance=1,
-            sticky_wall_preview_color=(276, 168, 274),
-            sticky_wall_color=(236, 103, 234),
+            sticky_wall_buffer_distance=0.8,
+            sticky_wall_outer_buffer_distance=0.2,
+            sticky_wall_background_color=(138, 57, 225),
+            sticky_wall_stripe_color=(156, 81, 224),
+            sticky_wall_background_width=0.8,
+            sticky_wall_stripe_width=1.2,
+            sticky_wall_stripe_angle=-math.pi / 6,
+            preview_sticky_wall_background_color=(251, 143, 249),
+            preview_sticky_wall_stripe_color=(236, 103, 234),
+            preview_sticky_wall_background_width=0.8,
+            preview_sticky_wall_stripe_width=1.2,
+            preview_sticky_wall_stripe_angle=-math.pi / 3,
             ball_image=assets().ball_image,
             max_shot_preview_points=shot_preview_simulation_updates + 1,
             shot_preview_lerp_up=0.15,
