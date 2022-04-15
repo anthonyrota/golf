@@ -159,7 +159,6 @@ class Physics:
         self._shot_sensitivity = shot_sensitivity
         self._gravity = gravity
         self._flag_position = flag_position
-        self._mouse_down = False
         self._mouse_dragging = None
         self._canceled_shot = False
         self._shot_preview_simulation_updates = shot_preview_simulation_updates
@@ -429,8 +428,6 @@ class Physics:
 
     def _bind_events(self):
         def on_mouse_press(x, y, buttons, _modifiers):
-            if buttons & pyglet.window.mouse.LEFT:
-                self._mouse_down = True
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT:
@@ -453,8 +450,6 @@ class Physics:
                     self._mouse_dragging.state = _MouseDraggingState.DRAGGING
 
         def on_mouse_release(_x, _y, buttons, _modifiers):
-            if buttons & pyglet.window.mouse.LEFT:
-                self._mouse_down = False
             if (
                 buttons & pyglet.window.mouse.LEFT
                 and self._mode.state == _ModeState.PLACE_STICKY
@@ -517,8 +512,8 @@ class Physics:
                     self._canceled_shot = True
                     self._mouse_dragging = None
                 elif self._mode.state == _ModeState.PLACE_STICKY:
-                    if self._mouse_down:
-                        self._mode = _PlaceStickyMode(False)
+                    self._mode = _MakeShotMode()
+                    self._canceled_shot = True
 
         def on_mouse_motion(x, y, _dx, _dy):
             self._mouse_position = Vec2(x, y)
