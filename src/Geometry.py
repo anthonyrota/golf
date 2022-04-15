@@ -1046,9 +1046,10 @@ class Geometry:
         self._dynamic_ball_trail_polygon_distance_buffer = None
         self._dynamic_ball_outer_vertex_buffer.dispose()
         self._dynamic_ball_inner_vertex_buffer.dispose()
-        self._sand_pits_3d_ground_indexed_vertices.dispose()
-        self._sand_pits_3d_ground_indexed_vertices = None
-        self._sand_pits_indexed_vertices.dispose()
-        self._sand_pits_indexed_vertices = None
+        if self._sand_pits_indexed_vertices:
+            self._sand_pits_3d_ground_indexed_vertices.dispose()
+            self._sand_pits_3d_ground_indexed_vertices = None
+            self._sand_pits_indexed_vertices.dispose()
+            self._sand_pits_indexed_vertices = None
         self._tess.dispose()
         self._tess = None

@@ -2,6 +2,7 @@ import math
 from random import randint, randrange
 from collections import deque
 from pyglet.math import Vec2
+from shapely.geometry import Polygon
 from collision import (
     Vector as CollisionVector,
     Poly,
@@ -221,7 +222,12 @@ def place_start_flat_and_flag_flat(contours, grid):
 
 
 def make_sand_pits(
-    contours, min_sand_pit_area, max_sand_pit_area, max_sand_pits, avoid_rects
+    contours,
+    min_sand_pit_area,
+    max_sand_pit_area,
+    max_sand_pits,
+    avoid_rects,
+    ball_radius,
 ):
     avoid_polys = [
         ConcavePoly(
@@ -242,8 +248,12 @@ def make_sand_pits(
     ]
 
     def sand_pit_to_poly(sand_pit):
+        shape = Polygon(sand_pit).buffer(ball_radius, 4)
+        assert isinstance(shape, Polygon)
         return ConcavePoly(
-            CollisionVector(0, 0), [CollisionVector(v[0], v[1]) for v in sand_pit]
+            CollisionVector(0, 0),
+            # pylint: disable-next=no-member
+            [CollisionVector(v[0], v[1]) for v in shape.exterior.coords][:-1],
         )
 
     sand_pits = []

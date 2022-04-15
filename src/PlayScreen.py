@@ -14,7 +14,7 @@ from Geometry import Geometry, ColoredPlatformBuffer
 from Physics import Physics
 
 
-def _gen_cave(width, height, pseudo_3d_ground_height):
+def _gen_cave(width, height, pseudo_3d_ground_height, ball_radius):
     cave_grid = make_cave_grid(
         width=width,
         height=height,
@@ -35,6 +35,7 @@ def _gen_cave(width, height, pseudo_3d_ground_height):
             start_flat.make_rect(pseudo_3d_ground_height),
             flag_flat.make_rect(pseudo_3d_ground_height),
         ],
+        ball_radius=ball_radius,
     )
     return cave_contours, start_flat, flag_flat, sand_pits
 
@@ -70,12 +71,12 @@ class PlayScreen(GameScreen):
 
         width, height = 60, 30
         cave_contours, start_flat, flag_flat, sand_pits = self._cave or _gen_cave(
-            width, height, pseudo_3d_ground_height
+            width, height, pseudo_3d_ground_height, ball_radius
         )
         thread = CallbackThread(
             cb=self._on_thread_done,
             target=_gen_cave,
-            args=(width, height, pseudo_3d_ground_height),
+            args=(width, height, pseudo_3d_ground_height, ball_radius),
         )
         thread.start()
 
