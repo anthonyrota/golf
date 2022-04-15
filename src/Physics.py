@@ -161,6 +161,7 @@ class Physics:
         self._flag_position = flag_position
         self._mouse_dragging = None
         self._canceled_shot = False
+        self._has_pressed_mouse_in_current_mode = False
         self._shot_preview_simulation_updates = shot_preview_simulation_updates
         self._shot_number = 0
         self._updates_per_new_ball_trail_point = updates_per_new_ball_trail_point
@@ -428,6 +429,8 @@ class Physics:
 
     def _bind_events(self):
         def on_mouse_press(x, y, buttons, _modifiers):
+            if buttons & pyglet.window.mouse.LEFT:
+                self._has_pressed_mouse_in_current_mode = True
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT:
@@ -436,6 +439,11 @@ class Physics:
 
         def on_mouse_drag(x, y, _dx, _dy, buttons, _modifiers):
             self._mouse_position = Vec2(x, y)
+            if (
+                self._mode.state == _ModeState.PLACE_STICKY
+                and self._mode.mouse_pos is not False
+            ):
+                self._mode = _PlaceStickyMode(Vec2(x, y))
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT:
@@ -453,6 +461,7 @@ class Physics:
             if (
                 buttons & pyglet.window.mouse.LEFT
                 and self._mode.state == _ModeState.PLACE_STICKY
+                and self._has_pressed_mouse_in_current_mode
             ):
                 if self._mode.mouse_pos is False:
                     self._mode = _PlaceStickyMode(self._mouse_position)
@@ -484,7 +493,11 @@ class Physics:
                         self._mode = _MakeShotMode()
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
-            if buttons & pyglet.window.mouse.LEFT and self._mouse_dragging:
+            if (
+                buttons & pyglet.window.mouse.LEFT
+                and self._mouse_dragging
+                and self._has_pressed_mouse_in_current_mode
+            ):
                 if self._mouse_dragging.state == _MouseDraggingState.PRESSED:
                     self._mouse_dragging = None
                 else:
@@ -500,6 +513,7 @@ class Physics:
             ):
                 return
             if symbol in config().place_sticky_mode_keys:
+                self._has_pressed_mouse_in_current_mode = False
                 if self._mode.state == _ModeState.PLACE_STICKY:
                     self._canceled_shot = False
                     self._mode = _MakeShotMode()
@@ -508,6 +522,7 @@ class Physics:
                     self._mode = _PlaceStickyMode(self._mouse_position)
                     self._mouse_dragging = None
             elif symbol in config().cancel_keys:
+                self._has_pressed_mouse_in_current_mode = False
                 if self._mode.state == _ModeState.MAKE_SHOT:
                     self._canceled_shot = True
                     self._mouse_dragging = None
