@@ -31,7 +31,7 @@ class _MakeShotMode:
 
 
 class _PlaceStickyMode:
-    def __init__(self, mouse_pos=None):
+    def __init__(self, mouse_pos):
         self.state = _ModeState.PLACE_STICKY
         self.mouse_pos = mouse_pos
 
@@ -159,6 +159,7 @@ class Physics:
         self._shot_sensitivity = shot_sensitivity
         self._gravity = gravity
         self._flag_position = flag_position
+        self._mouse_down = False
         self._mouse_dragging = None
         self._canceled_shot = False
         self._shot_preview_simulation_updates = shot_preview_simulation_updates
@@ -169,6 +170,7 @@ class Physics:
         self._ball_trail_points = []
         self._ball_trail_width = ball_trail_width
         self._on_level_complete = on_level_complete
+        self._mouse_position = None
         self._mode = _MakeShotMode()
         self._sticky_radius = sticky_radius
         self._stickies = []
@@ -330,7 +332,9 @@ class Physics:
         return self._ball_trail_points + [self._get_ball_trail_point()]
 
     def get_preview_sticky(self):
-        if self._mode.state != _ModeState.PLACE_STICKY or self._mode.mouse_pos is None:
+        if self._mode.state != _ModeState.PLACE_STICKY or not isinstance(
+            self._mode.mouse_pos, Vec2
+        ):
             return None
         return self._get_closest_sticky_in_radius_of_position(
             position=self._camera.screen_position_to_world_position(
@@ -425,6 +429,8 @@ class Physics:
 
     def _bind_events(self):
         def on_mouse_press(x, y, buttons, _modifiers):
+            if buttons & pyglet.window.mouse.LEFT:
+                self._mouse_down = True
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT:
@@ -432,6 +438,7 @@ class Physics:
                 self._mouse_dragging = _MouseDragging(Vec2(x, y))
 
         def on_mouse_drag(x, y, _dx, _dy, buttons, _modifiers):
+            self._mouse_position = Vec2(x, y)
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT:
@@ -446,34 +453,40 @@ class Physics:
                     self._mouse_dragging.state = _MouseDraggingState.DRAGGING
 
         def on_mouse_release(_x, _y, buttons, _modifiers):
+            if buttons & pyglet.window.mouse.LEFT:
+                self._mouse_down = False
             if (
                 buttons & pyglet.window.mouse.LEFT
                 and self._mode.state == _ModeState.PLACE_STICKY
-                and self._mode.mouse_pos is not None
             ):
-                sticky = self._get_closest_sticky_in_radius_of_position(
-                    position=self._camera.screen_position_to_world_position(
-                        self._mode.mouse_pos
-                    ),
-                    radius=self._sticky_radius,
-                    is_preview=False,
-                )
-                if sticky:
-                    for c1, c2 in zip(sticky.wall, sticky.wall[1:]):
-                        k = _encode_segment_coords(c1, c2)
-                        shape = self._contour_segment_map[k].pymunk_shape
-                        shape.collision_type = sticky_collision_type
-                        self._contour_segment_map[k] = _ContourSegment(
-                            shape, _ContourSegmentType.STICKY
-                        )
-                    new_stickies, new_sticky, removed_stickies = add_sticky_to_stickies(
-                        self._stickies, sticky
+                if self._mode.mouse_pos is False:
+                    self._mode = _PlaceStickyMode(self._mouse_position)
+                elif isinstance(self._mode.mouse_pos, Vec2):
+                    sticky = self._get_closest_sticky_in_radius_of_position(
+                        position=self._camera.screen_position_to_world_position(
+                            self._mode.mouse_pos
+                        ),
+                        radius=self._sticky_radius,
+                        is_preview=False,
                     )
-                    self._stickies = new_stickies
-                    for removed_sticky in removed_stickies:
-                        self._on_sticky_removed(removed_sticky)
-                    self._on_new_sticky(new_sticky)
-                    self._mode = _MakeShotMode()
+                    if sticky:
+                        for c1, c2 in zip(sticky.wall, sticky.wall[1:]):
+                            k = _encode_segment_coords(c1, c2)
+                            shape = self._contour_segment_map[k].pymunk_shape
+                            shape.collision_type = sticky_collision_type
+                            self._contour_segment_map[k] = _ContourSegment(
+                                shape, _ContourSegmentType.STICKY
+                            )
+                        (
+                            new_stickies,
+                            new_sticky,
+                            removed_stickies,
+                        ) = add_sticky_to_stickies(self._stickies, sticky)
+                        self._stickies = new_stickies
+                        for removed_sticky in removed_stickies:
+                            self._on_sticky_removed(removed_sticky)
+                        self._on_new_sticky(new_sticky)
+                        self._mode = _MakeShotMode()
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
                 return
             if buttons & pyglet.window.mouse.LEFT and self._mouse_dragging:
@@ -497,17 +510,23 @@ class Physics:
                     self._mode = _MakeShotMode()
                 else:
                     self._canceled_shot = False
-                    self._mode = _PlaceStickyMode()
+                    self._mode = _PlaceStickyMode(self._mouse_position)
                     self._mouse_dragging = None
-            elif symbol in config().cancel_shot_keys:
+            elif symbol in config().cancel_keys:
                 if self._mode.state == _ModeState.MAKE_SHOT:
                     self._canceled_shot = True
                     self._mouse_dragging = None
+                elif self._mode.state == _ModeState.PLACE_STICKY:
+                    if self._mouse_down:
+                        self._mode = _PlaceStickyMode(False)
 
         def on_mouse_motion(x, y, _dx, _dy):
-            if self._mode.state != _ModeState.PLACE_STICKY:
-                return
-            self._mode = _PlaceStickyMode(Vec2(x, y))
+            self._mouse_position = Vec2(x, y)
+            if (
+                self._mode.state == _ModeState.PLACE_STICKY
+                and self._mode.mouse_pos is not False
+            ):
+                self._mode = _PlaceStickyMode(Vec2(x, y))
 
         self._game.window.push_handlers(
             on_mouse_press,

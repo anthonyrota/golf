@@ -58,6 +58,7 @@ class PlayScreen(GameScreen):
         self._level_complete = False
         self._cave = cave
         self._next_cave = None
+        self._did_delay = False
 
     def bind(self, game):
         self._game = game
@@ -179,7 +180,10 @@ class PlayScreen(GameScreen):
         )
         self._geometry.render(camera=self._camera, physics=self._physics)
         if self._level_complete and self._next_cave is not None:
-            self._game.set_screen(PlayScreen(cave=self._next_cave))
+            if self._did_delay:
+                self._game.set_screen(PlayScreen(cave=self._next_cave))
+            else:
+                self._did_delay = True
 
     def update(self, dt):
         if self._level_complete:

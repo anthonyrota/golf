@@ -6,7 +6,7 @@ class _Config:
         self.updates_per_second = 240
         self.target_fps = 60
         self.place_sticky_mode_keys = [key.G]
-        self.cancel_shot_keys = [key.ESCAPE, key.DELETE, key.BACKSPACE, key.C]
+        self.cancel_keys = [key.ESCAPE, key.DELETE, key.BACKSPACE, key.C]
 
 
 _config = None
