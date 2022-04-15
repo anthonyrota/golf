@@ -2,7 +2,6 @@ import math
 from random import choice
 from threading import Thread
 from pyglet.math import Vec2
-from assets import assets
 from Camera import Camera
 from GameScreen import GameScreen
 from cave_gen import (
@@ -91,12 +90,17 @@ class PlayScreen(GameScreen):
             flag_ground_stripe_width=1,
             flag_ground_stripe_angle=math.pi / 4,
             platform_buffers=[
+                ColoredPlatformBuffer(distance=0.2, color=(68, 255, 15)),
                 ColoredPlatformBuffer(distance=1.5, color=(46, 197, 0)),
                 ColoredPlatformBuffer(distance=6.5, color=(55, 30, 11)),
             ],
+            bg_color=(47, 168, 202),
             pseudo_3d_ground_height=pseudo_3d_ground_height,
             pseudo_3d_ground_color=(68, 255, 15),
             unbuffed_platform_color=(24, 8, 2),
+            ball_color=(255, 255, 255),
+            ball_outline_color=(0, 0, 0),
+            ball_outline_size=0.25,
             sand_pits=sand_pits,
             sand_pits_color=(212, 139, 33),
             sand_pits_pseudo_3d_ground_color=(248, 235, 99),
@@ -112,7 +116,6 @@ class PlayScreen(GameScreen):
             preview_sticky_wall_background_width=0.8,
             preview_sticky_wall_stripe_width=1.2,
             preview_sticky_wall_stripe_angle=-math.pi / 3,
-            ball_image=assets().ball_image,
             max_shot_preview_points=shot_preview_simulation_updates + 1,
             shot_preview_lerp_up=0.15,
             shot_preview_lerp_down=0.05,

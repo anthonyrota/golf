@@ -1,6 +1,5 @@
 from random import random
 import math
-import pyglet
 from pyglet import gl
 from pyglet.math import Vec2
 from shapely.geometry import (
@@ -18,7 +17,7 @@ from Physics import add_sticky_to_stickies
 
 
 BUFFER_RESOLUTION = 8
-DRAWBACK_CIRCLE_POINTS = 64
+CIRCLE_POINTS = 64
 
 
 single_color_shader = pyshaders.from_string(
@@ -168,9 +167,13 @@ class Geometry:
         flag_ground_stripe_width,
         flag_ground_stripe_angle,
         platform_buffers,
+        bg_color,
         pseudo_3d_ground_height,
         pseudo_3d_ground_color,
         unbuffed_platform_color,
+        ball_color,
+        ball_outline_color,
+        ball_outline_size,
         sand_pits,
         sand_pits_color,
         sand_pits_pseudo_3d_ground_color,
@@ -186,7 +189,6 @@ class Geometry:
         preview_sticky_wall_background_width,
         preview_sticky_wall_stripe_width,
         preview_sticky_wall_stripe_angle,
-        ball_image,
         max_shot_preview_points,
         shot_preview_lerp_up,
         shot_preview_lerp_down,
@@ -212,8 +214,12 @@ class Geometry:
         self._flag_ground_background_width = flag_ground_background_width
         self._flag_ground_stripe_width = flag_ground_stripe_width
         self._flag_ground_stripe_angle = flag_ground_stripe_angle
+        self._bg_color = bg_color
         self._pseudo_3d_ground_color = pseudo_3d_ground_color
         self._unbuffed_platform_color = unbuffed_platform_color
+        self._ball_color = ball_color
+        self._ball_outline_color = ball_outline_color
+        self._ball_outline_size = ball_outline_size
         self._sand_pits_color = sand_pits_color
         self._sand_pits_pseudo_3d_ground_color = sand_pits_pseudo_3d_ground_color
         self._sticky_wall_buffer_distance = sticky_wall_buffer_distance
@@ -251,8 +257,6 @@ class Geometry:
         self._ball_trail_color = ball_trail_color
         self._ball_trail_fade_factor = ball_trail_fade_factor
         self._ball_trail_base_alpha = ball_trail_base_alpha
-        self._ball_image = ball_image
-        self._ball_sprite = pyglet.sprite.Sprite(img=ball_image, subpixel=True)
         self.exterior_rect = None
         self._pseudo_3d_ground_indexed_vertices = None
         self._unbuffed_platform_indexed_vertices = None
@@ -271,6 +275,8 @@ class Geometry:
         self._dynamic_drawback_circle_inner_ring_vertex_buffer = None
         self._dynamic_ball_trail_polygon_vertex_buffer = None
         self._dynamic_ball_trail_polygon_distance_buffer = None
+        self._dynamic_ball_outer_vertex_buffer = None
+        self._dynamic_ball_inner_vertex_buffer = None
         self.raw_point_shift = None
         self._tess = None
         self._make_static_geometry(
@@ -526,16 +532,22 @@ class Geometry:
             [0] * max_shot_preview_points * 2, 1, "float", is_dynamic=True
         )
         self._dynamic_drawback_circle_outer_ring_vertex_buffer = Buffer(
-            [0] * (DRAWBACK_CIRCLE_POINTS + 1) * 4, 2, "float", is_dynamic=True
+            [0] * (CIRCLE_POINTS + 1) * 4, 2, "float", is_dynamic=True
         )
         self._dynamic_drawback_circle_inner_ring_vertex_buffer = Buffer(
-            [0] * (DRAWBACK_CIRCLE_POINTS + 1) * 4, 2, "float", is_dynamic=True
+            [0] * (CIRCLE_POINTS + 1) * 4, 2, "float", is_dynamic=True
         )
         self._dynamic_ball_trail_polygon_vertex_buffer = Buffer(
             [0] * self._num_ball_trail_points * 4, 2, "float", is_dynamic=True
         )
         self._dynamic_ball_trail_polygon_distance_buffer = Buffer(
             [0] * self._num_ball_trail_points * 2, 1, "float", is_dynamic=True
+        )
+        self._dynamic_ball_outer_vertex_buffer = Buffer(
+            [0] * (CIRCLE_POINTS + 1) * 4, 2, "float", is_dynamic=True
+        )
+        self._dynamic_ball_inner_vertex_buffer = Buffer(
+            [0] * CIRCLE_POINTS * 2, 2, "float", is_dynamic=True
         )
 
     def _make_sticky_indexed_vertices(self, sticky):
@@ -593,6 +605,8 @@ class Geometry:
             raise Exception("Tried removing a sticky that does not exist.")
 
     def render(self, camera, physics):
+        bg_color = normalize_color(self._bg_color)
+        gl.glClearColor(bg_color[0], bg_color[1], bg_color[2], 1.0)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT)
         gl.glLoadIdentity()
         gl.glEnableClientState(gl.GL_VERTEX_ARRAY)
@@ -828,16 +842,16 @@ class Geometry:
                 physics.get_drag_current()
             )
             inner_radius = abs(drag_current - drag_start)
-            circle_a = make_circle(drag_start, inner_radius, DRAWBACK_CIRCLE_POINTS)
+            circle_a = make_circle(drag_start, inner_radius, CIRCLE_POINTS)
             circle_b = make_circle(
                 drag_start,
                 inner_radius + self._shot_drawback_ring_width,
-                DRAWBACK_CIRCLE_POINTS,
+                CIRCLE_POINTS,
             )
             circle_c = make_circle(
                 drag_start,
                 inner_radius + 2 * self._shot_drawback_ring_width,
-                DRAWBACK_CIRCLE_POINTS,
+                CIRCLE_POINTS,
             )
             inner_ring_vertices = make_ring_vertices_from_circles(circle_a, circle_b)
             outer_ring_vertices = make_ring_vertices_from_circles(circle_b, circle_c)
@@ -912,7 +926,7 @@ class Geometry:
             self._dynamic_drawback_circle_outer_ring_vertex_buffer.bind_to_attrib(
                 single_color_shader.attributes.a_vertex_position
             )
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, (DRAWBACK_CIRCLE_POINTS + 1) * 2)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, (CIRCLE_POINTS + 1) * 2)
             # pylint: disable=assigning-non-slot
             single_color_shader.uniforms.u_color = normalize_color(
                 self._shot_drawback_inner_ring_color
@@ -922,7 +936,7 @@ class Geometry:
             self._dynamic_drawback_circle_inner_ring_vertex_buffer.bind_to_attrib(
                 single_color_shader.attributes.a_vertex_position
             )
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, (DRAWBACK_CIRCLE_POINTS + 1) * 2)
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, (CIRCLE_POINTS + 1) * 2)
             single_color_shader.clear()
 
         trail = physics.get_ball_trail()
@@ -961,18 +975,40 @@ class Geometry:
             gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, len(trail) * 2)
             faded_color_shader.clear()
 
-        gl.glPushMatrix()
-        camera.update_opengl_matrix()
-
-        self._ball_sprite.update(
-            x=physics.ball_position.x - physics.ball_radius,
-            y=physics.ball_position.y - physics.ball_radius,
-            scale_x=2 * physics.ball_radius / self._ball_image.width,
-            scale_y=2 * physics.ball_radius / self._ball_image.height,
+        assert physics.ball_radius > self._ball_outline_size
+        ball_outer_circle = make_circle(
+            physics.ball_position, physics.ball_radius, CIRCLE_POINTS
         )
-        self._ball_sprite.draw()
-
-        gl.glPopMatrix()
+        ball_inner_circle = make_circle(
+            physics.ball_position,
+            physics.ball_radius - self._ball_outline_size,
+            CIRCLE_POINTS,
+        )
+        ball_ring_vertices = make_ring_vertices_from_circles(
+            ball_outer_circle, ball_inner_circle
+        )
+        ball_inner_vertices = []
+        for x, y in ball_inner_circle:
+            ball_inner_vertices.append(x)
+            ball_inner_vertices.append(y)
+        single_color_shader.use()
+        self._dynamic_ball_outer_vertex_buffer.update_part(ball_ring_vertices, 0)
+        self._dynamic_ball_inner_vertex_buffer.update_part(ball_inner_vertices, 0)
+        # pylint: disable=assigning-non-slot
+        single_color_shader.uniforms.u_alpha = 1
+        single_color_shader.uniforms.u_color = normalize_color(self._ball_outline_color)
+        # pylint: enable=assigning-non-slot
+        self._dynamic_ball_outer_vertex_buffer.bind_to_attrib(
+            single_color_shader.attributes.a_vertex_position
+        )
+        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, (CIRCLE_POINTS + 1) * 2)
+        # pylint: disable-next=assigning-non-slot
+        single_color_shader.uniforms.u_color = normalize_color(self._ball_color)
+        self._dynamic_ball_inner_vertex_buffer.bind_to_attrib(
+            single_color_shader.attributes.a_vertex_position
+        )
+        gl.glDrawArrays(gl.GL_TRIANGLE_FAN, 0, CIRCLE_POINTS)
+        single_color_shader.clear()
 
     def dispose(self):
         self._pseudo_3d_ground_indexed_vertices.dispose()
@@ -986,8 +1022,6 @@ class Geometry:
         self._start_flat_indexed_vertices = None
         self._flag_flat_indexed_vertices.dispose()
         self._flag_flat_indexed_vertices = None
-        self._ball_image = None
-        self._ball_sprite = None
         if self._is_closed_in:
             self._dynamic_wall_indexed_vertices.dispose()
             self._dynamic_wall_indexed_vertices = None
@@ -1010,6 +1044,8 @@ class Geometry:
         self._dynamic_ball_trail_polygon_vertex_buffer = None
         self._dynamic_ball_trail_polygon_distance_buffer.dispose()
         self._dynamic_ball_trail_polygon_distance_buffer = None
+        self._dynamic_ball_outer_vertex_buffer.dispose()
+        self._dynamic_ball_inner_vertex_buffer.dispose()
         self._sand_pits_3d_ground_indexed_vertices.dispose()
         self._sand_pits_3d_ground_indexed_vertices = None
         self._sand_pits_indexed_vertices.dispose()

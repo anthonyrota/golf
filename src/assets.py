@@ -9,9 +9,6 @@ class _Assets:
         pyglet.font.add_directory(
             os.path.join(src_dir, "..", "assets", "fonts", "Roboto_Condensed")
         )
-        self.ball_image = pyglet.image.load(
-            os.path.join(src_dir, "..", "assets", "Ball.png")
-        )
 
 
 _assets = None
