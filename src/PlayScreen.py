@@ -64,7 +64,7 @@ class PlayScreen(GameScreen):
     def bind(self, game):
         self._game = game
 
-        ball_radius = 0.7
+        ball_radius = 0.6
         pseudo_3d_ground_height = 0.6
         shot_preview_simulation_updates = self._game.updates_per_second * 3
         ball_trail_points_per_second = 30
@@ -83,6 +83,7 @@ class PlayScreen(GameScreen):
 
         flag_width = 2
         flag_hole_pixels = 31
+        flag_hole_width = flag_width * (flag_hole_pixels / assets().flag_img.width)
         self._geometry = Geometry(
             contours=cave_contours[1:],
             exterior_contour=cave_contours[0],
@@ -91,9 +92,7 @@ class PlayScreen(GameScreen):
             flag_img=assets().flag_img,
             flag_width=flag_width,
             flag_height=flag_width * assets().flag_img.height / assets().flag_img.width,
-            flag_offset=Vec2(
-                -flag_width * (flag_hole_pixels / assets().flag_img.width) / 2, 0.05
-            ),
+            flag_offset=Vec2(-flag_hole_width / 2, 0.05),
             flag_ground_background_color=(20, 198, 22),
             flag_ground_stripe_color=(17, 180, 11),
             flag_ground_background_width=1,
@@ -110,7 +109,7 @@ class PlayScreen(GameScreen):
             unbuffed_platform_color=(24, 8, 2),
             ball_color=(255, 255, 255),
             ball_outline_color=(0, 0, 0),
-            ball_outline_size=0.25,
+            ball_outline_size=0.2,
             sand_pits=sand_pits,
             sand_pits_color=(212, 139, 33),
             sand_pits_pseudo_3d_ground_color=(248, 235, 99),
@@ -170,7 +169,7 @@ class PlayScreen(GameScreen):
             shot_sensitivity=0.4,
             gravity=Vec2(0, -30),
             flag_position=flag_flat.get_middle() + self._geometry.raw_point_shift,
-            flag_collision_shape_radius=1,
+            flag_collision_shape_radius=flag_hole_width,
             shot_preview_simulation_updates=shot_preview_simulation_updates,
             updates_per_new_ball_trail_point=self._game.updates_per_second
             // ball_trail_points_per_second,
@@ -179,7 +178,10 @@ class PlayScreen(GameScreen):
             sticky_radius=6,
             on_new_sticky=self._geometry.add_sticky,
             on_sticky_removed=self._geometry.remove_sticky,
-            on_level_complete=self._on_level_complete,
+            on_reach_flag=self._on_reach_flag,
+            on_hole_animation_done=self._on_hole_animation_done,
+            hole_animation_to_over_hole_duration=0.1,
+            hole_animation_to_in_hole_duration=0.2,
         )
 
     def render(self):
@@ -208,12 +210,17 @@ class PlayScreen(GameScreen):
         if self._level_complete:
             self._game.set_screen(PlayScreen(cave=self._next_cave))
 
-    def _on_level_complete(self):
+    def _on_reach_flag(self):
+        self._physics.animate_ball_into_hole()
+
+    def _on_hole_animation_done(self):
         self._level_complete = True
 
     def unbind(self):
         self._game = None
-        self._physics.dispose()
+        if self._physics:
+            self._physics.dispose()
+            self._physics = None
         self._geometry.dispose()
         self._geometry = None
         self._physics = None

@@ -1,4 +1,5 @@
 from enum import Enum, auto
+from time import time
 import math
 import pyglet
 from pyglet.math import Vec2
@@ -144,7 +145,10 @@ class Physics:
         sticky_radius,
         on_new_sticky,
         on_sticky_removed,
-        on_level_complete,
+        on_reach_flag,
+        on_hole_animation_done,
+        hole_animation_to_over_hole_duration,
+        hole_animation_to_in_hole_duration,
     ):
         self._game = game
         self._camera = camera
@@ -169,7 +173,7 @@ class Physics:
         self._num_ball_trail_points = num_ball_trail_points
         self._ball_trail_points = []
         self._ball_trail_width = ball_trail_width
-        self._on_level_complete = on_level_complete
+        self._on_reach_flag = on_reach_flag
         self._mouse_position = None
         self._mode = _MakeShotMode()
         self._sticky_radius = sticky_radius
@@ -179,6 +183,14 @@ class Physics:
         self._contours = contours
         self._exterior_contour = exterior_contour
         self._contour_segment_map = {}
+        self._on_hole_animation_done = on_hole_animation_done
+        self._hole_animation_start_time = None
+        self._hole_animation_start_pos = None
+        self._hole_animation_to_over_hole_duration = (
+            hole_animation_to_over_hole_duration
+        )
+        self._hole_animation_to_in_hole_duration = hole_animation_to_in_hole_duration
+        self._did_unbind_events = False
 
         for contour_idx, contour in enumerate([exterior_contour] + contours):
             for i, p1 in enumerate(contour):
@@ -214,8 +226,26 @@ class Physics:
         self._space.add(shape.body, shape)
         self._ball_shape = shape
 
-        self._flag_collision_shape = pymunk.Circle(
-            self._space.static_body, flag_collision_shape_radius, self._flag_position
+        self._flag_collision_shape = pymunk.Poly(
+            self._space.static_body,
+            [
+                (
+                    flag_position[0] - flag_collision_shape_radius / 2,
+                    flag_position[1] - 0.1,
+                ),
+                (
+                    flag_position[0] + flag_collision_shape_radius / 2,
+                    flag_position[1] - 0.1,
+                ),
+                (
+                    flag_position[0] + flag_collision_shape_radius / 2,
+                    flag_position[1] + 0.1,
+                ),
+                (
+                    flag_position[0] - flag_collision_shape_radius / 2,
+                    flag_position[1] + 0.1,
+                ),
+            ],
         )
         self._flag_collision_shape.collision_type = flag_collision_type
         self._space.add(self._flag_collision_shape)
@@ -230,10 +260,14 @@ class Physics:
         self._bind_events()
 
     def _on_ball_flag_collision(self, _arb, _space, _data):
-        self._on_level_complete()
+        if self._hole_animation_start_time is not None:
+            return False
+        self._on_reach_flag()
         return False
 
     def _on_ball_sticky_collision(self, _arb, _space, _data):
+        if self._hole_animation_start_time is not None:
+            return False
         self._space.gravity = (0, 0)
         self._ball_shape.body.velocity = (0, 0)
         self._ball_shape.body.angular_velocity = 0
@@ -252,6 +286,39 @@ class Physics:
 
     def update(self, dt):
         assert not (self._is_in_shot and self._mouse_dragging)
+        if self._hole_animation_start_time is not None:
+            if self._hole_animation_start_time is False:
+                return
+            cur_time = time()
+            over_hole_time = (
+                self._hole_animation_start_time
+                + self._hole_animation_to_over_hole_duration
+            )
+            in_hole_time = over_hole_time + self._hole_animation_to_in_hole_duration
+            if cur_time < over_hole_time:
+                t = (
+                    cur_time - self._hole_animation_start_time
+                ) / self._hole_animation_to_over_hole_duration
+                self._ball_shape.body.velocity = Vec2(1, 0)
+                self._ball_shape.body.position = self._hole_animation_start_pos + (
+                    self._flag_position
+                    + Vec2(0, self.ball_radius)
+                    - self._hole_animation_start_pos
+                ).scale(1 - (1 - t) ** 2)
+                self._update_ball_trail()
+            elif cur_time < in_hole_time:
+                t = (
+                    cur_time - over_hole_time
+                ) / self._hole_animation_to_in_hole_duration
+                self._ball_shape.body.velocity = Vec2(0, -1)
+                self._ball_shape.body.position = self._flag_position + Vec2(
+                    0, self.ball_radius - 1.2 * self.ball_radius * (t ** 2)
+                )
+                self._update_ball_trail()
+            else:
+                self._hole_animation_start_time = False
+                self._on_hole_animation_done()
+            return
         if (
             self._mouse_dragging
             and self._mouse_dragging.state == _MouseDraggingState.RELEASED
@@ -277,14 +344,22 @@ class Physics:
             self._ball_trail_points = []
             return False
         if self._is_in_shot:
-            if self._updates_until_new_ball_trail_point == 0:
-                self._updates_until_new_ball_trail_point = (
-                    self._updates_per_new_ball_trail_point
-                )
-                self._ball_trail_points.append(self._get_ball_trail_point())
-                if len(self._ball_trail_points) > self._num_ball_trail_points:
-                    self._ball_trail_points.pop(0)
-            self._updates_until_new_ball_trail_point -= 1
+            self._update_ball_trail()
+
+    def _update_ball_trail(self):
+        if self._updates_until_new_ball_trail_point == 0:
+            self._updates_until_new_ball_trail_point = (
+                self._updates_per_new_ball_trail_point
+            )
+            self._ball_trail_points.append(self._get_ball_trail_point())
+            if len(self._ball_trail_points) > self._num_ball_trail_points:
+                self._ball_trail_points.pop(0)
+        self._updates_until_new_ball_trail_point -= 1
+
+    def animate_ball_into_hole(self):
+        self._unbind_events()
+        self._hole_animation_start_time = time()
+        self._hole_animation_start_pos = self.ball_position
 
     def get_drag_velocity(self):
         vel = (self._mouse_dragging.start - self._mouse_dragging.current).scale(
@@ -547,4 +622,7 @@ class Physics:
         )
 
     def _unbind_events(self):
+        if self._did_unbind_events:
+            return
+        self._did_unbind_events = True
         self._game.window.pop_handlers()
