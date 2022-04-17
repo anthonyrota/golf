@@ -12,6 +12,7 @@ from cave_gen import (
 )
 from Geometry import Geometry, ColoredPlatformBuffer
 from Physics import Physics
+from assets import assets
 
 
 def _gen_cave(width, height, pseudo_3d_ground_height, ball_radius):
@@ -80,11 +81,19 @@ class PlayScreen(GameScreen):
         )
         thread.start()
 
+        flag_width = 2
+        flag_hole_pixels = 31
         self._geometry = Geometry(
             contours=cave_contours[1:],
             exterior_contour=cave_contours[0],
             start_flat=start_flat,
             flag_flat=flag_flat,
+            flag_img=assets().flag_img,
+            flag_width=flag_width,
+            flag_height=flag_width * assets().flag_img.height / assets().flag_img.width,
+            flag_offset=Vec2(
+                -flag_width * (flag_hole_pixels / assets().flag_img.width) / 2, 0.05
+            ),
             flag_ground_background_color=(20, 198, 22),
             flag_ground_stripe_color=(17, 180, 11),
             flag_ground_background_width=1,

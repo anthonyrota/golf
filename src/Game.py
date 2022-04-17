@@ -29,7 +29,7 @@ class Game:
     def run(self):
         def on_key_press(symbol, _modifiers):
             if symbol == pyglet.window.key.ESCAPE:
-                return True
+                return pyglet.event.EVENT_HANDLED
 
         self.window.push_handlers(on_key_press)
         pyglet.clock.schedule_interval(self._tick, 1 / self._target_fps)

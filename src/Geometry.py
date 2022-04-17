@@ -1,5 +1,6 @@
 from random import random
 import math
+import pyglet
 from pyglet import gl
 from pyglet.math import Vec2
 from shapely.geometry import (
@@ -161,6 +162,10 @@ class Geometry:
         exterior_contour,
         start_flat,
         flag_flat,
+        flag_img,
+        flag_width,
+        flag_height,
+        flag_offset,
         flag_ground_background_color,
         flag_ground_stripe_color,
         flag_ground_background_width,
@@ -209,6 +214,12 @@ class Geometry:
         ball_trail_base_alpha,
     ):
         self._is_closed_in = exterior_contour is not None
+        self._flag_flat = flag_flat
+        self._flag_img = flag_img
+        self._flag_sprite = pyglet.sprite.Sprite(flag_img, subpixel=True)
+        self._flag_width = flag_width
+        self._flag_height = flag_height
+        self._flag_offset = flag_offset
         self._flag_ground_background_color = flag_ground_background_color
         self._flag_ground_stripe_color = flag_ground_stripe_color
         self._flag_ground_background_width = flag_ground_background_width
@@ -294,6 +305,12 @@ class Geometry:
     def frame(self):
         return self.exterior_rect
 
+    def _adjust_point(self, point):
+        return Vec2(
+            point[0] + self.raw_point_shift[0],
+            point[1] + self.raw_point_shift[1],
+        )
+
     def _make_static_geometry(
         self,
         contours,
@@ -326,12 +343,6 @@ class Geometry:
         self.raw_point_shift = Vec2(
             bounds_buff - exterior_bottom_left[0], bounds_buff - exterior_bottom_left[1]
         )
-
-        def adjust_point(point):
-            return (
-                point[0] + self.raw_point_shift[0],
-                point[1] + self.raw_point_shift[1],
-            )
 
         def adjust_point_and_randomize(point):
             # shapely throws an error and I don't know why, but adding a
@@ -459,7 +470,7 @@ class Geometry:
 
         if sand_pits:
             adjusted_sand_pits = [
-                [adjust_point(c) for c in sand_pit] for sand_pit in sand_pits
+                [self._adjust_point(c) for c in sand_pit] for sand_pit in sand_pits
             ]
             sand_pit_pseudo_vertices = []
             sand_pit_pseudo_indices = []
@@ -495,7 +506,7 @@ class Geometry:
                 [list(shape.exterior.coords)]
             )
 
-        start_flat_pos = adjust_point(start_flat.pos)
+        start_flat_pos = self._adjust_point(start_flat.pos)
         self._start_flat_indexed_vertices = make_rounded_rectangle_indexed_vertices(
             Rectangle(
                 Vec2(start_flat_pos[0], start_flat_pos[1]),
@@ -503,7 +514,7 @@ class Geometry:
                 pseudo_3d_ground_height,
             ),
         )
-        flag_flat_pos = adjust_point(flag_flat.pos)
+        flag_flat_pos = self._adjust_point(flag_flat.pos)
         self._flag_flat_indexed_vertices = make_rounded_rectangle_indexed_vertices(
             Rectangle(
                 Vec2(flag_flat_pos[0], flag_flat_pos[1]),
@@ -1010,7 +1021,30 @@ class Geometry:
         gl.glDrawArrays(gl.GL_TRIANGLE_FAN, 0, CIRCLE_POINTS)
         single_color_shader.clear()
 
+        def draw_sprite(sprite, img, world_pos, w, h):
+            bl = camera.world_position_to_screen_position(world_pos)
+            tr = camera.world_position_to_screen_position(world_pos + Vec2(w, h))
+            screen_width = tr.x - bl.x
+            screen_height = tr.y - bl.y
+            sprite.update(
+                x=bl.x,
+                y=bl.y,
+                scale_x=screen_width / img.width,
+                scale_y=screen_height / img.height,
+            )
+            sprite.draw()
+
+        draw_sprite(
+            self._flag_sprite,
+            self._flag_img,
+            self._adjust_point(self._flag_flat.get_middle()) + self._flag_offset,
+            self._flag_width,
+            self._flag_height,
+        )
+
     def dispose(self):
+        self._flag_img = None
+        self._flag_sprite = None
         self._pseudo_3d_ground_indexed_vertices.dispose()
         self._pseudo_3d_ground_indexed_vertices = None
         self._unbuffed_platform_indexed_vertices.dispose()

@@ -1,4 +1,3 @@
-from pyglet import gl
 from pyglet.math import Vec2, Mat4
 from Rectangle import Rectangle
 
@@ -21,12 +20,10 @@ class Camera:
         return view_matrix
 
     def screen_position_to_world_position(self, screen_position):
-        return (screen_position).scale(1 / self.get_scale()) + self.position
+        return screen_position.scale(1 / self.get_scale()) + self.position
 
-    def update_opengl_matrix(self):
-        scale = self.get_scale()
-        gl.glScalef(scale, scale, 1)
-        gl.glTranslatef(-self.position.x, -self.position.y, 0.0)
+    def world_position_to_screen_position(self, world_position):
+        return (world_position - self.position).scale(self.get_scale())
 
     def get_view_rect(self):
         return Rectangle(
