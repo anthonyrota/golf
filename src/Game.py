@@ -31,7 +31,10 @@ class Game:
             if symbol == pyglet.window.key.ESCAPE:
                 return pyglet.event.EVENT_HANDLED
 
-        self.window.push_handlers(on_key_press)
+        def on_resize(_w, _h):
+            self._screen.render()
+
+        self.window.push_handlers(on_key_press, on_resize)
         pyglet.clock.schedule_interval(self._tick, 1 / self._target_fps)
         pyglet.app.run()
 
