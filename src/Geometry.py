@@ -182,6 +182,18 @@ class ColoredPlatformBuffer(PlatformBuffer):
         self.color = color
 
 
+class ColoredPlatformBufferWithGradientTexture(PlatformBuffer):
+    def __init__(
+        self, distance, color, light_color, dark_color, texture_img, texture_scale
+    ):
+        super().__init__(distance)
+        self.color = color
+        self.light_color = light_color
+        self.dark_color = dark_color
+        self.texture_img = texture_img
+        self.texture_scale = texture_scale
+
+
 def normalize_color(color):
     return (color[0] / 255, color[1] / 255, color[2] / 255)
 
@@ -206,7 +218,7 @@ class Geometry:
         bg_color,
         pseudo_3d_ground_height,
         pseudo_3d_ground_color,
-        unbuffed_platform_color,
+        unbuffed_platform,
         ball_color,
         ball_outline_color,
         ball_outline_size,
@@ -264,7 +276,7 @@ class Geometry:
         self._flag_ground_stripe_angle = flag_ground_stripe_angle
         self._bg_color = bg_color
         self._pseudo_3d_ground_color = pseudo_3d_ground_color
-        self._unbuffed_platform_color = unbuffed_platform_color
+        self._unbuffed_platform = unbuffed_platform
         self._ball_color = ball_color
         self._ball_outline_color = ball_outline_color
         self._ball_outline_size = ball_outline_size
@@ -685,9 +697,9 @@ class Geometry:
         self._pseudo_3d_ground_indexed_vertices.render(
             single_color_shader.attributes.a_vertex_position
         )
+        single_color_shader.clear()
 
         if self._sand_pits_indexed_vertices:
-            single_color_shader.clear()
             single_color_with_gradient_texture_shader.use()
             # pylint: disable=assigning-non-slot
             single_color_with_gradient_texture_shader.uniforms.u_view_matrix = (
@@ -727,19 +739,52 @@ class Geometry:
                 single_color_with_gradient_texture_shader.attributes.a_vertex_position
             )
             single_color_with_gradient_texture_shader.clear()
-            single_color_shader.use()
-        # pylint: disable-next=assigning-non-slot
-        single_color_shader.uniforms.u_color = normalize_color(
-            self._unbuffed_platform_color
+
+        def render_platform(plat, indexed_vertices):
+            if isinstance(plat, ColoredPlatformBuffer):
+                single_color_shader.use()
+                # pylint: disable-next=assigning-non-slot
+                single_color_shader.uniforms.u_color = normalize_color(plat.color)
+                indexed_vertices.render(
+                    single_color_shader.attributes.a_vertex_position
+                )
+                single_color_shader.clear()
+            elif isinstance(plat, ColoredPlatformBufferWithGradientTexture):
+                single_color_with_gradient_texture_shader.use()
+                # pylint: disable=assigning-non-slot
+                single_color_with_gradient_texture_shader.uniforms.u_view_matrix = (
+                    view_matrix
+                )
+                single_color_with_gradient_texture_shader.uniforms.u_color = (
+                    normalize_color(plat.color)
+                )
+                single_color_with_gradient_texture_shader.uniforms.u_light_color = (
+                    normalize_color(plat.light_color)
+                )
+                single_color_with_gradient_texture_shader.uniforms.u_dark_color = (
+                    normalize_color(plat.dark_color)
+                )
+                single_color_with_gradient_texture_shader.uniforms.u_texture_scale = (
+                    plat.texture_scale
+                )
+                # pylint: enable=assigning-non-slot
+                texture = plat.texture_img.get_texture()
+                gl.glEnable(texture.target)
+                gl.glBindTexture(texture.target, texture.id)
+                indexed_vertices.render(
+                    single_color_with_gradient_texture_shader.attributes.a_vertex_position
+                )
+                single_color_with_gradient_texture_shader.clear()
+            else:
+                raise Exception("Unknown platform buffer type")
+
+        render_platform(
+            self._unbuffed_platform, self._unbuffed_platform_indexed_vertices
         )
-        self._unbuffed_platform_indexed_vertices.render(
-            single_color_shader.attributes.a_vertex_position
-        )
+
         for buff, indexed_vertices in self._buffed_platform_indexed_vertices:
-            assert isinstance(buff, ColoredPlatformBuffer)
-            # pylint: disable-next=assigning-non-slot
-            single_color_shader.uniforms.u_color = normalize_color(buff.color)
-            indexed_vertices.render(single_color_shader.attributes.a_vertex_position)
+            render_platform(buff, indexed_vertices)
+
         if self._is_closed_in:
             rectangles = list(camera.get_view_rect().subtract(self.exterior_rect))
             if len(rectangles) > 0:
@@ -766,15 +811,9 @@ class Geometry:
                 self._dynamic_wall_indexed_vertices.update_part_of_index_buffer(
                     new_indices, 0
                 )
-            # pylint: disable-next=assigning-non-slot
-            single_color_shader.uniforms.u_color = normalize_color(
-                self._unbuffed_platform_color
-            )
-            self._dynamic_wall_indexed_vertices.render(
-                single_color_shader.attributes.a_vertex_position,
-                num_triangles=len(rectangles) * 2,
-            )
-        single_color_shader.clear()
+                render_platform(
+                    self._unbuffed_platform, self._dynamic_wall_indexed_vertices
+                )
 
         def make_stripe_line(angle):
             return (math.sin(angle), -math.cos(angle), 0)

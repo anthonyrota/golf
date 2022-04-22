@@ -9,6 +9,9 @@ class _Assets:
         self.font_name = "Roboto Condensed"
         pyglet.font.add_directory(os.path.join(assets_dir, "fonts", "Roboto_Condensed"))
         self.flag_img = pyglet.image.load(os.path.join(assets_dir, "Flag.png"))
+        self.dirt_texture_img = pyglet.image.load(
+            os.path.join(assets_dir, "Dirt Texture.png")
+        )
         self.sand_texture_img = pyglet.image.load(
             os.path.join(assets_dir, "Sand Texture.png")
         )

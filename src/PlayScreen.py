@@ -10,7 +10,11 @@ from cave_gen import (
     place_start_flat_and_flag_flat,
     make_sand_pits,
 )
-from Geometry import Geometry, ColoredPlatformBuffer
+from Geometry import (
+    Geometry,
+    ColoredPlatformBuffer,
+    ColoredPlatformBufferWithGradientTexture,
+)
 from Physics import Physics
 from assets import assets
 
@@ -110,6 +114,9 @@ class PlayScreen(GameScreen):
         flag_hole_width = flag_width * (flag_hole_pixels / assets().flag_img.width)
         sand_pits_color = (212, 139, 33)
         sand_pits_pseudo_3d_ground_color = (248, 235, 99)
+        dirt_outline_color = (55, 30, 11)
+        dirt_color = (32, 12, 4)
+        dirt_texture_scale = 0.032
         self._geometry = Geometry(
             contours=cave_contours[1:],
             exterior_contour=cave_contours[0],
@@ -127,12 +134,26 @@ class PlayScreen(GameScreen):
             platform_buffers=[
                 ColoredPlatformBuffer(distance=0.2, color=(68, 255, 15)),
                 ColoredPlatformBuffer(distance=1.5, color=(46, 197, 0)),
-                ColoredPlatformBuffer(distance=6.5, color=(55, 30, 11)),
+                ColoredPlatformBufferWithGradientTexture(
+                    distance=6.5,
+                    color=dirt_outline_color,
+                    light_color=lighten_color(dirt_outline_color, 0.1),
+                    dark_color=darken_color(dirt_outline_color, 0.1),
+                    texture_img=assets().dirt_texture_img,
+                    texture_scale=dirt_texture_scale,
+                ),
             ],
             bg_color=(47, 168, 202),
             pseudo_3d_ground_height=pseudo_3d_ground_height,
             pseudo_3d_ground_color=(68, 255, 15),
-            unbuffed_platform_color=(24, 8, 2),
+            unbuffed_platform=ColoredPlatformBufferWithGradientTexture(
+                distance=None,
+                color=dirt_color,
+                light_color=lighten_color(dirt_color, 0.1),
+                dark_color=darken_color(dirt_color, 0.1),
+                texture_img=assets().dirt_texture_img,
+                texture_scale=dirt_texture_scale,
+            ),
             ball_color=(255, 255, 255),
             ball_outline_color=(0, 0, 0),
             ball_outline_size=0.2,
