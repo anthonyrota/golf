@@ -22,8 +22,8 @@ def _gen_cave(width, height, pseudo_3d_ground_height, ball_radius):
         wall_chance=40,
         min_surrounding_walls=5,
         iterations=5,
-        pillar_iterations=2,
-        min_open_percent=0.35,
+        pillar_iterations=5,
+        min_open_percent=0.3,
     )
     cave_contours = make_cave_contours(cave_grid, width, height)
     start_flat, flag_flat = place_start_flat_and_flag_flat(cave_contours, cave_grid)
@@ -48,6 +48,30 @@ class CallbackThread(Thread):
 
     def run(self):
         self._cb(self._target(*self._args))
+
+
+def clamp(x, a, b):
+    if x < a:
+        return a
+    if x > b:
+        return b
+    return x
+
+
+def darken_color(color, pct):
+    return (
+        clamp(color[0] * (1 - pct), 0, 255),
+        clamp(color[1] * (1 - pct), 0, 255),
+        clamp(color[2] * (1 - pct), 0, 255),
+    )
+
+
+def lighten_color(color, pct):
+    return (
+        clamp(color[0] * (1 + pct), 0, 255),
+        clamp(color[1] * (1 + pct), 0, 255),
+        clamp(color[2] * (1 + pct), 0, 255),
+    )
 
 
 class PlayScreen(GameScreen):
@@ -84,6 +108,8 @@ class PlayScreen(GameScreen):
         flag_width = 2
         flag_hole_pixels = 31
         flag_hole_width = flag_width * (flag_hole_pixels / assets().flag_img.width)
+        sand_pits_color = (212, 139, 33)
+        sand_pits_pseudo_3d_ground_color = (248, 235, 99)
         self._geometry = Geometry(
             contours=cave_contours[1:],
             exterior_contour=cave_contours[0],
@@ -111,8 +137,18 @@ class PlayScreen(GameScreen):
             ball_outline_color=(0, 0, 0),
             ball_outline_size=0.2,
             sand_pits=sand_pits,
-            sand_pits_color=(212, 139, 33),
-            sand_pits_pseudo_3d_ground_color=(248, 235, 99),
+            sand_pits_color=sand_pits_color,
+            sand_pits_light_color=lighten_color(sand_pits_color, 0.1),
+            sand_pits_dark_color=darken_color(sand_pits_color, 0.1),
+            sand_pits_pseudo_3d_ground_color=sand_pits_pseudo_3d_ground_color,
+            sand_pits_pseudo_3d_ground_light_color=lighten_color(
+                sand_pits_pseudo_3d_ground_color, 0.1
+            ),
+            sand_pits_pseudo_3d_ground_dark_color=darken_color(
+                sand_pits_pseudo_3d_ground_color, 0.1
+            ),
+            sand_pits_texture_img=assets().sand_texture_img,
+            sand_pits_texture_scale=0.3,
             sticky_wall_buffer_distance=0.8,
             sticky_wall_outer_buffer_distance=0.2,
             sticky_wall_background_color=(138, 57, 225),

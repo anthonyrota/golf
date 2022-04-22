@@ -41,6 +41,37 @@ void main() {
 )
 
 
+single_color_with_gradient_texture_shader = pyshaders.from_string(
+    [
+        """attribute vec2 a_vertex_position;
+uniform mat4 u_view_matrix;
+varying vec2 v_vertex_position;
+
+void main() {
+    v_vertex_position = a_vertex_position;
+    gl_Position = u_view_matrix * vec4(a_vertex_position, 0.0, 1.0);
+}"""
+    ],
+    [
+        """uniform vec3 u_color;
+uniform vec3 u_light_color;
+uniform vec3 u_dark_color;
+uniform float u_texture_scale;
+uniform sampler2D u_texture;
+varying vec2 v_vertex_position;
+
+void main() {
+    float darken = texture2D(u_texture, v_vertex_position * u_texture_scale).r;
+    if (darken < .5) {
+        gl_FragColor = vec4(mix(u_dark_color, u_color, (darken-.5)/.5), 1.0);
+    } else {
+        gl_FragColor = vec4(mix(u_color, u_light_color, darken/.5), 1.0);
+    }
+}"""
+    ],
+)
+
+
 stripe_shader = pyshaders.from_string(
     [
         """attribute vec2 a_vertex_position;
@@ -181,7 +212,13 @@ class Geometry:
         ball_outline_size,
         sand_pits,
         sand_pits_color,
+        sand_pits_light_color,
+        sand_pits_dark_color,
         sand_pits_pseudo_3d_ground_color,
+        sand_pits_pseudo_3d_ground_light_color,
+        sand_pits_pseudo_3d_ground_dark_color,
+        sand_pits_texture_img,
+        sand_pits_texture_scale,
         sticky_wall_buffer_distance,
         sticky_wall_outer_buffer_distance,
         sticky_wall_background_color,
@@ -232,7 +269,17 @@ class Geometry:
         self._ball_outline_color = ball_outline_color
         self._ball_outline_size = ball_outline_size
         self._sand_pits_color = sand_pits_color
+        self._sand_pits_light_color = sand_pits_light_color
+        self._sand_pits_dark_color = sand_pits_dark_color
         self._sand_pits_pseudo_3d_ground_color = sand_pits_pseudo_3d_ground_color
+        self._sand_pits_pseudo_3d_ground_light_color = (
+            sand_pits_pseudo_3d_ground_light_color
+        )
+        self._sand_pits_pseudo_3d_ground_dark_color = (
+            sand_pits_pseudo_3d_ground_dark_color
+        )
+        self._sand_pits_texture_img = sand_pits_texture_img
+        self._sand_pits_texture_scale = sand_pits_texture_scale
         self._sticky_wall_buffer_distance = sticky_wall_buffer_distance
         self._sticky_wall_outer_buffer_distance = sticky_wall_outer_buffer_distance
         self._sticky_wall_background_color = sticky_wall_background_color
@@ -638,21 +685,49 @@ class Geometry:
         self._pseudo_3d_ground_indexed_vertices.render(
             single_color_shader.attributes.a_vertex_position
         )
+
         if self._sand_pits_indexed_vertices:
-            # pylint: disable-next=assigning-non-slot
-            single_color_shader.uniforms.u_color = normalize_color(
-                self._sand_pits_pseudo_3d_ground_color
+            single_color_shader.clear()
+            single_color_with_gradient_texture_shader.use()
+            # pylint: disable=assigning-non-slot
+            single_color_with_gradient_texture_shader.uniforms.u_view_matrix = (
+                view_matrix
             )
+            single_color_with_gradient_texture_shader.uniforms.u_color = (
+                normalize_color(self._sand_pits_pseudo_3d_ground_color)
+            )
+            single_color_with_gradient_texture_shader.uniforms.u_light_color = (
+                normalize_color(self._sand_pits_pseudo_3d_ground_light_color)
+            )
+            single_color_with_gradient_texture_shader.uniforms.u_dark_color = (
+                normalize_color(self._sand_pits_pseudo_3d_ground_dark_color)
+            )
+            single_color_with_gradient_texture_shader.uniforms.u_texture_scale = (
+                self._sand_pits_texture_scale
+            )
+            # pylint: enable=assigning-non-slot
+            texture = self._sand_pits_texture_img.get_texture()
+            gl.glEnable(texture.target)
+            gl.glBindTexture(texture.target, texture.id)
             self._sand_pits_3d_ground_indexed_vertices.render(
-                single_color_shader.attributes.a_vertex_position
+                single_color_with_gradient_texture_shader.attributes.a_vertex_position
             )
-            # pylint: disable-next=assigning-non-slot
-            single_color_shader.uniforms.u_color = normalize_color(
-                self._sand_pits_color
+            # pylint: disable=assigning-non-slot
+            single_color_with_gradient_texture_shader.uniforms.u_color = (
+                normalize_color(self._sand_pits_color)
             )
+            single_color_with_gradient_texture_shader.uniforms.u_light_color = (
+                normalize_color(self._sand_pits_light_color)
+            )
+            single_color_with_gradient_texture_shader.uniforms.u_dark_color = (
+                normalize_color(self._sand_pits_dark_color)
+            )
+            # pylint: enable=assigning-non-slot
             self._sand_pits_indexed_vertices.render(
-                single_color_shader.attributes.a_vertex_position
+                single_color_with_gradient_texture_shader.attributes.a_vertex_position
             )
+            single_color_with_gradient_texture_shader.clear()
+            single_color_shader.use()
         # pylint: disable-next=assigning-non-slot
         single_color_shader.uniforms.u_color = normalize_color(
             self._unbuffed_platform_color
