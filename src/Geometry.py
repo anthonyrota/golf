@@ -740,7 +740,7 @@ class Geometry:
             )
             single_color_with_gradient_texture_shader.clear()
 
-        def render_platform(plat, indexed_vertices):
+        def render_platform(plat, indexed_vertices, num_triangles=None):
             if isinstance(plat, ColoredPlatformBuffer):
                 single_color_shader.use()
                 # pylint: disable-next=assigning-non-slot
@@ -772,7 +772,8 @@ class Geometry:
                 gl.glEnable(texture.target)
                 gl.glBindTexture(texture.target, texture.id)
                 indexed_vertices.render(
-                    single_color_with_gradient_texture_shader.attributes.a_vertex_position
+                    single_color_with_gradient_texture_shader.attributes.a_vertex_position,
+                    num_triangles,
                 )
                 single_color_with_gradient_texture_shader.clear()
             else:
@@ -812,7 +813,9 @@ class Geometry:
                     new_indices, 0
                 )
                 render_platform(
-                    self._unbuffed_platform, self._dynamic_wall_indexed_vertices
+                    self._unbuffed_platform,
+                    self._dynamic_wall_indexed_vertices,
+                    len(rectangles) * 2,
                 )
 
         def make_stripe_line(angle):
