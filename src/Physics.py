@@ -149,6 +149,9 @@ class Physics:
         on_hole_animation_done,
         hole_animation_to_over_hole_duration,
         hole_animation_to_in_hole_duration,
+        on_shot_start,
+        on_shot_end,
+        get_is_paused,
     ):
         self._game = game
         self._camera = camera
@@ -167,7 +170,7 @@ class Physics:
         self._canceled_shot = False
         self._has_pressed_mouse_in_current_mode = False
         self._shot_preview_simulation_updates = shot_preview_simulation_updates
-        self._shot_number = 0
+        self.shot_number = 0
         self._updates_per_new_ball_trail_point = updates_per_new_ball_trail_point
         self._updates_until_new_ball_trail_point = 0
         self._num_ball_trail_points = num_ball_trail_points
@@ -190,6 +193,9 @@ class Physics:
             hole_animation_to_over_hole_duration
         )
         self._hole_animation_to_in_hole_duration = hole_animation_to_in_hole_duration
+        self._on_shot_start = on_shot_start
+        self._on_shot_end = on_shot_end
+        self._get_is_paused = get_is_paused
         self._did_unbind_events = False
 
         for contour_idx, contour in enumerate([exterior_contour] + contours):
@@ -323,12 +329,13 @@ class Physics:
             self._mouse_dragging
             and self._mouse_dragging.state == _MouseDraggingState.RELEASED
         ):
-            self._shot_number += 1
+            self.shot_number += 1
             self._is_in_shot = True
             self._space.gravity = self._gravity
             self._ball_shape.body.velocity = self.get_drag_velocity()
             self._mouse_dragging = None
             self._ball_flag_collision_handler.begin = self._on_ball_flag_collision
+            self._on_shot_start()
         self._space.step(dt)
         if (
             self._is_in_shot
@@ -342,6 +349,7 @@ class Physics:
             self._ball_flag_collision_handler.begin = lambda _arb, _space, _data: False
             self._updates_until_new_ball_trail_point = 0
             self._ball_trail_points = []
+            self._on_shot_end()
             return False
         if self._is_in_shot:
             self._update_ball_trail()
@@ -502,8 +510,16 @@ class Physics:
             and self._mouse_dragging.state == _MouseDraggingState.DRAGGING
         )
 
+    def reset_events(self):
+        self._mouse_dragging = None
+        self._mode = _MakeShotMode()
+        self._canceled_shot = False
+        self._has_pressed_mouse_in_current_mode = False
+
     def _bind_events(self):
         def on_mouse_press(x, y, buttons, _modifiers):
+            if self._get_is_paused():
+                return
             if buttons & pyglet.window.mouse.LEFT:
                 self._has_pressed_mouse_in_current_mode = True
             if self._is_in_shot or self._mode.state != _ModeState.MAKE_SHOT:
@@ -514,6 +530,8 @@ class Physics:
 
         def on_mouse_drag(x, y, _dx, _dy, buttons, _modifiers):
             self._mouse_position = Vec2(x, y)
+            if self._get_is_paused():
+                return
             if (
                 self._mode.state == _ModeState.PLACE_STICKY
                 and self._mode.mouse_pos is not False
@@ -533,6 +551,8 @@ class Physics:
                     self._mouse_dragging.state = _MouseDraggingState.DRAGGING
 
         def on_mouse_release(_x, _y, buttons, _modifiers):
+            if self._get_is_paused():
+                return
             if (
                 buttons & pyglet.window.mouse.LEFT
                 and self._mode.state == _ModeState.PLACE_STICKY
@@ -579,6 +599,8 @@ class Physics:
                     self._mouse_dragging.state = _MouseDraggingState.RELEASED
 
         def on_key_release(symbol, modifiers):
+            if self._get_is_paused():
+                return
             if (
                 modifiers & key.MOD_SHIFT
                 or modifiers & key.MOD_ALT
@@ -607,6 +629,8 @@ class Physics:
 
         def on_mouse_motion(x, y, _dx, _dy):
             self._mouse_position = Vec2(x, y)
+            if self._get_is_paused():
+                return
             if (
                 self._mode.state == _ModeState.PLACE_STICKY
                 and self._mode.mouse_pos is not False

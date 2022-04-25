@@ -1,6 +1,6 @@
 import ctypes
 from pyglet import gl
-from IndexedVertices import IndexedVertices
+from gl_util import IndexedVertices
 
 
 glBeginFuncType = ctypes.CFUNCTYPE(None, gl.GLenum)

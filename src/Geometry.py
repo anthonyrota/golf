@@ -13,9 +13,8 @@ from shapely.geometry import (
 import pyshaders
 from Rectangle import Rectangle
 from Tessellator import Tessellator
-from IndexedVertices import Buffer, IndexedVertices
 from Physics import add_sticky_to_stickies
-
+from gl_util import Buffer, IndexedVertices, normalize_color, clear_gl
 
 BUFFER_RESOLUTION = 8
 CIRCLE_POINTS = 64
@@ -192,10 +191,6 @@ class ColoredPlatformBufferWithGradientTexture(PlatformBuffer):
         self.dark_color = dark_color
         self.texture_img = texture_img
         self.texture_scale = texture_scale
-
-
-def normalize_color(color):
-    return (color[0] / 255, color[1] / 255, color[2] / 255)
 
 
 class Geometry:
@@ -674,14 +669,10 @@ class Geometry:
         else:
             raise Exception("Tried removing a sticky that does not exist.")
 
-    def render(self, camera, physics):
-        bg_color = normalize_color(self._bg_color)
-        gl.glClearColor(bg_color[0], bg_color[1], bg_color[2], 1.0)
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-        gl.glLoadIdentity()
-        gl.glEnableClientState(gl.GL_VERTEX_ARRAY)
-        gl.glEnable(gl.GL_BLEND)
-        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+    def render(self, camera, physics, framebuffer):
+        if framebuffer is not None:
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, framebuffer.fbo)
+        clear_gl(self._bg_color)
 
         camera_matrix = camera.get_matrix()
         view_matrix = [camera_matrix.column(i) for i in range(4)]
@@ -1158,6 +1149,9 @@ class Geometry:
             self._flag_width,
             self._flag_height,
         )
+
+        if framebuffer is not None:
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
 
     def dispose(self):
         self._flag_img = None

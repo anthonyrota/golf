@@ -1,84 +1,89 @@
 import glooey
-from assets import assets
 from GameScreen import GameScreen
-from PlayScreen import PlayScreen
-from OptionsScreen import OptionsScreen
+import PlayOptionsScreen
+from widgets import Button, ToggleSoundButton, ButtonStack
+from assets import assets
+from StaticBlurredBackground import StaticBlurredBackground
+from gl_util import clear_gl
 
 
-class WhiteBackground(glooey.Background):
-    custom_color = "#ffffff"
-
-
-class NavigationButton(glooey.Button):
-    class Foreground(glooey.Label):
-        custom_color = "#ffffff"
-        custom_font_size = 24
-        custom_font_name = assets().font_name
-        custom_alignment = "center"
-
-    custom_alignment = "fill"
-
-    class Base(glooey.Background):
-        custom_color = "#146600"
-
-    class Over(glooey.Background):
-        custom_color = "#1D8F00"
-
-    class Down(glooey.Background):
-        custom_color = "#25B800"
-
-
-def navigation_container_alignment(_self, child_rect, parent_rect):
-    child_rect.width = min(0.7 * parent_rect.width, 700)
-    child_rect.height = min(0.7 * parent_rect.height, 450)
-    child_rect.center = parent_rect.center
-
-
-class NavigationContainer(glooey.VBox):
-    custom_alignment = navigation_container_alignment
-    custom_cell_padding = 24
+class ToggleSoundButtonTopLeft(ToggleSoundButton):
+    custom_alignment = "top left"
+    custom_padding = 24
 
 
 class MainMenuScreen(GameScreen):
-    def __init__(self):
+    def __init__(self, blurred_background_img=None):
         self._game = None
         self._vbox = None
-        self._white_background = None
+        self._sound_btn = None
+        self._blurred_background_img = blurred_background_img
+        self._blurred_background = None
+
+    def _add_gui(self):
+        def on_sound_btn_click(_widget):
+            self._game.set_is_sound_enabled(not self._sound_btn.is_checked)
+
+        def on_play_btn_click(_widget):
+            self._game.set_screen(
+                PlayOptionsScreen.PlayOptionsScreen(self._blurred_background_img)
+            )
+
+        def on_quit_btn_click(_widget):
+            self._game.quit()
+
+        self._vbox = glooey.VBox()
+        if self._game.size == "small":
+            logo = glooey.Image(image=assets().logo_small_img)
+        else:
+            logo = glooey.Image(image=assets().logo_large_img)
+        self._vbox.add(logo)
+        btn_stack = ButtonStack()
+        btn_stack.set_size(self._game.size)
+        self._vbox.add(btn_stack)
+        play_btn = Button("Play")
+        play_btn.set_handler("on_click", on_play_btn_click)
+        play_btn.set_size(self._game.size)
+        btn_stack.add(play_btn)
+        quit_btn = Button("Quit")
+        quit_btn.set_handler("on_click", on_quit_btn_click)
+        quit_btn.set_size(self._game.size)
+        btn_stack.add(quit_btn)
+        self._sound_btn = ToggleSoundButtonTopLeft(self._game.is_sound_enabled)
+        self._sound_btn.set_handler("on_click", on_sound_btn_click)
+        self._game.gui.add(self._vbox)
+        self._game.gui.add(self._sound_btn)
+        self._game.on_size_change(self._on_size_change)
+
+    def _remove_gui(self):
+        self._game.gui.remove(self._vbox)
+        self._game.gui.remove(self._sound_btn)
+        self._vbox = None
+        self._sound_btn = None
+        self._game.off_size_change(self._on_size_change)
+
+    def _on_size_change(self):
+        self._remove_gui()
+        self._add_gui()
 
     def bind(self, game):
         self._game = game
-
-        def on_play_button_click(_widget):
-            self._game.set_screen(PlayScreen())
-
-        def on_options_button_click(_widget):
-            self._game.set_screen(OptionsScreen())
-
-        def on_quit_button_click(_widget):
-            self._game.quit()
-
-        self._white_background = WhiteBackground()
-        self._game.gui.add(self._white_background)
-        self._vbox = NavigationContainer()
-        play_button = NavigationButton("Play")
-        play_button.set_handler("on_click", on_play_button_click)
-        self._vbox.add(play_button)
-        options_button = NavigationButton("Options")
-        options_button.set_handler("on_click", on_options_button_click)
-        self._vbox.add(options_button)
-        quit_button = NavigationButton("Quit")
-        quit_button.set_handler("on_click", on_quit_button_click)
-        self._vbox.add(quit_button)
-        self._game.gui.add(self._vbox)
+        self._blurred_background = StaticBlurredBackground(
+            self._game, self._blurred_background_img
+        )
+        self._blurred_background_img = self._blurred_background.background_img
+        self._add_gui()
 
     def render(self):
-        pass
+        clear_gl((0, 0, 0))
+        self._blurred_background.render()
+        self._game.draw_gui()
 
     def update(self, dt):
         pass
 
     def unbind(self):
-        self._game.gui.remove(self._vbox)
-        self._game.gui.remove(self._white_background)
+        self._remove_gui()
         self._game = None
-        self._vbox = None
+        self._blurred_background.dispose()
+        self._blurred_background = None

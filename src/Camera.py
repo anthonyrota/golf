@@ -3,8 +3,9 @@ from Rectangle import Rectangle
 
 
 class Camera:
-    def __init__(self, game):
-        self._game = game
+    def __init__(self, window_width, window_height):
+        self._window_width = window_width
+        self._window_height = window_height
         self.position = Vec2()
         self.width = 1
 
@@ -35,8 +36,12 @@ class Camera:
     def get_height(self):
         return self.width * self.get_aspect()
 
+    def set_window_dimensions(self, window_width, window_height):
+        self._window_width = window_width
+        self._window_height = window_height
+
     def get_aspect(self):
-        return self._game.window.height / self._game.window.width
+        return self._window_height / self._window_width
 
     def get_scale(self):
-        return self._game.window.width / self.width
+        return self._window_width / self.width

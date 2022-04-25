@@ -2,6 +2,12 @@ from time import time
 import pyglet
 import pyglet.gl
 import glooey
+from widgets import large_window_width, large_window_height
+
+
+class MyGui(glooey.Gui):
+    def on_draw(self):
+        pass
 
 
 class Game:
@@ -21,10 +27,21 @@ class Game:
             caption="Golf Adventure",
         )
         self.window.set_minimum_size(640, 480)
-        self.gui = glooey.Gui(self.window, clear_before_draw=False)
+        self.gui = MyGui(self.window)
         self._screen = screen
-        self._screen.bind(self)
         self._average_dt = []
+        self._resize_handlers = []
+        self.size = self._get_size()
+        self.is_sound_enabled = True
+        self._screen.bind(self)
+
+    def _get_size(self):
+        if (
+            self.window.width >= large_window_width
+            and self.window.height >= large_window_height
+        ):
+            return "large"
+        return "small"
 
     def run(self):
         def on_key_press(symbol, _modifiers):
@@ -32,6 +49,11 @@ class Game:
                 return pyglet.event.EVENT_HANDLED
 
         def on_resize(_w, _h):
+            new_size = self._get_size()
+            if new_size != self.size:
+                self.size = new_size
+                for handler in self._resize_handlers:
+                    handler()
             self._screen.render()
 
         self.window.push_handlers(on_key_press, on_resize)
@@ -51,6 +73,18 @@ class Game:
             if self._screen.update(dt) is False:
                 break
         self._screen.render()
+
+    def draw_gui(self):
+        self.gui.batch.draw()
+
+    def set_is_sound_enabled(self, is_sound_enabled):
+        self.is_sound_enabled = is_sound_enabled
+
+    def on_size_change(self, handler):
+        self._resize_handlers.append(handler)
+
+    def off_size_change(self, handler):
+        self._resize_handlers.remove(handler)
 
     def set_screen(self, screen):
         self._screen.unbind()
