@@ -221,9 +221,6 @@ class PlayScreen(GameScreen):
             self._pause_time = time()
             self._refresh_gui()
 
-        def on_sound_btn_click(_widget):
-            self._game.set_is_sound_enabled(not sound_btn.is_checked)
-
         def on_play_again_btn_click(_widget):
             self._game.set_screen(PlayScreen(GameState(self._game_state.mode)))
 
@@ -248,21 +245,19 @@ class PlayScreen(GameScreen):
             icons_hbox = TopLeftHBox()
             icons_hbox.set_size(self._game.size)
             self._gui_elements.append(icons_hbox)
-            close_pause_btn = ClosePauseButton()
-            close_pause_btn.set_handler("on_click", on_pause_btn_click)
+            close_pause_btn = ClosePauseButton(self._game)
+            close_pause_btn.push_handlers(on_click=on_pause_btn_click)
             icons_hbox.add(close_pause_btn)
-            sound_btn = ToggleSoundButton(self._game.is_sound_enabled)
-            sound_btn.set_handler("on_click", on_sound_btn_click)
-            icons_hbox.add(sound_btn)
+            icons_hbox.add(ToggleSoundButton(self._game))
             btn_stack = CenteredButtonStack()
             btn_stack.set_size(self._game.size)
             self._gui_elements.append(btn_stack)
-            play_again_btn = Button("New Game")
-            play_again_btn.set_handler("on_click", on_play_again_btn_click)
+            play_again_btn = Button(self._game, "New Game")
+            play_again_btn.push_handlers(on_click=on_play_again_btn_click)
             play_again_btn.set_size(self._game.size)
             btn_stack.add(play_again_btn)
-            menu_btn = Button("Back to Menu")
-            menu_btn.set_handler("on_click", on_menu_btn_click)
+            menu_btn = Button(self._game, "Back to Menu")
+            menu_btn.push_handlers(on_click=on_menu_btn_click)
             menu_btn.set_size(self._game.size)
             btn_stack.add(menu_btn)
             labels_hbox = make_labels_hbox()
@@ -273,9 +268,7 @@ class PlayScreen(GameScreen):
             icons_hbox = TopLeftHBox()
             icons_hbox.set_size(self._game.size)
             self._gui_elements.append(icons_hbox)
-            sound_btn = ToggleSoundButton(self._game.is_sound_enabled)
-            sound_btn.set_handler("on_click", on_sound_btn_click)
-            icons_hbox.add(sound_btn)
+            icons_hbox.add(ToggleSoundButton(self._game))
             btn_stack = CenteredButtonStack()
             btn_stack.set_size(self._game.size)
             self._gui_elements.append(btn_stack)
@@ -284,12 +277,12 @@ class PlayScreen(GameScreen):
             )
             label.set_size(self._game.size)
             btn_stack.add(label)
-            play_again_btn = Button("Play Again")
-            play_again_btn.set_handler("on_click", on_play_again_btn_click)
+            play_again_btn = Button(self._game, "Play Again")
+            play_again_btn.push_handlers(on_click=on_play_again_btn_click)
             play_again_btn.set_size(self._game.size)
             btn_stack.add(play_again_btn)
-            menu_btn = Button("Back to Menu")
-            menu_btn.set_handler("on_click", on_menu_btn_click)
+            menu_btn = Button(self._game, "Back to Menu")
+            menu_btn.push_handlers(on_click=on_menu_btn_click)
             menu_btn.set_size(self._game.size)
             btn_stack.add(menu_btn)
             self._game.gui.add(icons_hbox)
@@ -298,12 +291,10 @@ class PlayScreen(GameScreen):
             icons_hbox = TopLeftHBox()
             icons_hbox.set_size(self._game.size)
             self._gui_elements.append(icons_hbox)
-            pause_btn = PauseButton()
-            pause_btn.set_handler("on_click", on_pause_btn_click)
+            pause_btn = PauseButton(self._game)
+            pause_btn.push_handlers(on_click=on_pause_btn_click)
             icons_hbox.add(pause_btn)
-            sound_btn = ToggleSoundButton(self._game.is_sound_enabled)
-            sound_btn.set_handler("on_click", on_sound_btn_click)
-            icons_hbox.add(sound_btn)
+            icons_hbox.add(ToggleSoundButton(self._game))
             labels_hbox = make_labels_hbox()
             self._game.gui.add(icons_hbox)
             self._game.gui.add(labels_hbox)
@@ -485,6 +476,8 @@ class PlayScreen(GameScreen):
             on_shot_start=self._on_shot_start,
             on_shot_end=self._on_shot_end,
             get_is_paused=lambda: self._paused,
+            on_ball_sticky_collision=self._on_ball_sticky_collision,
+            on_ball_sand_collision=self._on_ball_sand_collision,
         )
 
         self._add_gui()
@@ -609,7 +602,17 @@ class PlayScreen(GameScreen):
 
     def _on_reach_flag(self):
         self._reached_flag = True
+        if self._game.is_sound_enabled:
+            assets().ball_in_hole_sound.play()
         self._physics.animate_ball_into_hole()
+
+    def _on_ball_sticky_collision(self):
+        if self._game.is_sound_enabled:
+            assets().splat_sound.play()
+
+    def _on_ball_sand_collision(self):
+        if self._physics.ball_velocity.y < -1 and self._game.is_sound_enabled:
+            assets().sand_sound.play()
 
     def _on_hole_animation_done(self):
         self._level_complete = True
@@ -620,7 +623,8 @@ class PlayScreen(GameScreen):
             self._refresh_gui()
 
     def _on_shot_start(self):
-        pass
+        if self._game.is_sound_enabled:
+            assets().shot_sound.play()
 
     def _on_shot_end(self):
         self._shot_label.set_text(self._get_shot_label_text())

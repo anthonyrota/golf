@@ -21,9 +21,6 @@ class MainMenuScreen(GameScreen):
         self._blurred_background = None
 
     def _add_gui(self):
-        def on_sound_btn_click(_widget):
-            self._game.set_is_sound_enabled(not self._sound_btn.is_checked)
-
         def on_play_btn_click(_widget):
             self._game.set_screen(
                 PlayOptionsScreen.PlayOptionsScreen(self._blurred_background_img)
@@ -41,16 +38,15 @@ class MainMenuScreen(GameScreen):
         btn_stack = ButtonStack()
         btn_stack.set_size(self._game.size)
         self._vbox.add(btn_stack)
-        play_btn = Button("Play")
-        play_btn.set_handler("on_click", on_play_btn_click)
+        play_btn = Button(self._game, "Play")
+        play_btn.push_handlers(on_click=on_play_btn_click)
         play_btn.set_size(self._game.size)
         btn_stack.add(play_btn)
-        quit_btn = Button("Quit")
-        quit_btn.set_handler("on_click", on_quit_btn_click)
+        quit_btn = Button(self._game, "Quit")
+        quit_btn.push_handlers(on_click=on_quit_btn_click)
         quit_btn.set_size(self._game.size)
         btn_stack.add(quit_btn)
-        self._sound_btn = ToggleSoundButtonTopLeft(self._game.is_sound_enabled)
-        self._sound_btn.set_handler("on_click", on_sound_btn_click)
+        self._sound_btn = ToggleSoundButtonTopLeft(self._game)
         self._game.gui.add(self._vbox)
         self._game.gui.add(self._sound_btn)
         self._game.on_size_change(self._on_size_change)

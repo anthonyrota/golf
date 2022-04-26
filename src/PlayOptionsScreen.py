@@ -28,9 +28,6 @@ class PlayOptionsScreen(GameScreen):
                 MainMenuScreen.MainMenuScreen(self._blurred_background_img)
             )
 
-        def on_sound_btn_click(_widget):
-            self._game.set_is_sound_enabled(not sound_btn.is_checked)
-
         def make_on_mode_btn_click(mode):
             def on_mode_btn_click(_widget):
                 self._game.set_screen(PlayScreen(GameState(mode)))
@@ -40,12 +37,10 @@ class PlayOptionsScreen(GameScreen):
         icons_hbox = TopLeftHBox()
         icons_hbox.set_size(self._game.size)
         self._gui_elements.append(icons_hbox)
-        back_btn = BackButton()
-        back_btn.set_handler("on_click", on_back_btn_click)
+        back_btn = BackButton(self._game)
+        back_btn.push_handlers(on_click=on_back_btn_click)
         icons_hbox.add(back_btn)
-        sound_btn = ToggleSoundButton(self._game.is_sound_enabled)
-        sound_btn.set_handler("on_click", on_sound_btn_click)
-        icons_hbox.add(sound_btn)
+        icons_hbox.add(ToggleSoundButton(self._game))
         btn_stack = CenteredButtonStack()
         self._gui_elements.append(btn_stack)
         btn_stack.set_size(self._game.size)
@@ -58,8 +53,8 @@ class PlayOptionsScreen(GameScreen):
             ("Hard 5 Holes", Mode.HARD_5_HOLES),
             ("Hard 10 Holes", Mode.HARD_10_HOLES),
         ]:
-            btn = Button(label)
-            btn.set_handler("on_click", make_on_mode_btn_click(mode))
+            btn = Button(self._game, label)
+            btn.push_handlers(on_click=make_on_mode_btn_click(mode))
             btn.set_size(self._game.size)
             btn_stack.add(btn)
         self._game.gui.add(icons_hbox)

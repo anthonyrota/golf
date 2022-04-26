@@ -37,10 +37,17 @@ class Button(glooey.Button):
         custom_font_weight = "bold"
         custom_horz_padding = 70
 
-    def __init__(self, text=None):
+    def __init__(self, game, text=None):
         super().__init__(text)
+        self._game = game
         self._update_size()
         self.foreground.color = "white"
+
+        def play_sound(*_args, **_kwargs):
+            if self._game.is_sound_enabled:
+                assets().button_sound.play()
+
+        self.push_handlers(on_mouse_press=play_sound)
 
     def set_size(self, size):
         self.custom_size = size
@@ -107,12 +114,24 @@ class ButtonStackLabel(Label):
     custom_text_alignment = "center"
 
 
-class PauseButton(glooey.Button):
+class IconButton(glooey.Button):
+    def __init__(self, game, text=None):
+        super().__init__(text)
+        self._game = game
+
+        def play_sound(*_args, **_kwargs):
+            if self._game.is_sound_enabled:
+                assets().icon_button_sound.play()
+
+        self.push_handlers(on_mouse_press=play_sound)
+
+
+class PauseButton(IconButton):
     class Background(glooey.Background):
         custom_image = assets().pause_btn_img
 
 
-class ClosePauseButton(glooey.Button):
+class ClosePauseButton(IconButton):
     class Background(glooey.Background):
         custom_image = assets().close_pause_btn_img
 
@@ -121,8 +140,19 @@ class ToggleSoundButton(glooey.Checkbox):
     custom_unchecked_base = assets().sound_off_btn_img
     custom_checked_base = assets().sound_on_btn_img
 
+    def __init__(self, game):
+        super().__init__(game.is_sound_enabled)
+        self._game = game
 
-class BackButton(glooey.Button):
+        def toggle_sound(*_args, **_kwargs):
+            self._game.set_is_sound_enabled(not self.is_checked)
+            if self._game.is_sound_enabled:
+                assets().icon_button_sound.play()
+
+        self.push_handlers(on_click=toggle_sound)
+
+
+class BackButton(IconButton):
     class Background(glooey.Background):
         custom_image = assets().back_btn_img
 

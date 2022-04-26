@@ -5,7 +5,7 @@ import pyglet
 class _Assets:
     def __init__(self):
         src_dir = os.path.dirname(os.path.abspath(__file__))
-        assets_dir = os.path.join(src_dir, "..", "assets")
+        assets_dir = os.path.join(os.path.dirname(src_dir), "assets")
         self.font_name = "Roboto Condensed"
         self.pixel_font_name = "Minecraft"
         pyglet.font.add_directory(os.path.join(assets_dir, "fonts"))
@@ -75,6 +75,25 @@ class _Assets:
             pyglet.image.load(os.path.join(assets_dir, "backgrounds", f"Bg{i}.png"))
             for i in range(1, 11)
         ]
+        self.bgm_sound = pyglet.media.load(os.path.join(assets_dir, "sound", "Bgm.wav"))
+        self.button_sound = pyglet.media.load(
+            os.path.join(assets_dir, "sound", "Button.wav"), streaming=False
+        )
+        self.icon_button_sound = pyglet.media.load(
+            os.path.join(assets_dir, "sound", "Icon Button.wav"), streaming=False
+        )
+        self.sand_sound = pyglet.media.load(
+            os.path.join(assets_dir, "sound", "Sand.wav"), streaming=False
+        )
+        self.splat_sound = pyglet.media.load(
+            os.path.join(assets_dir, "sound", "Splat.wav"), streaming=False
+        )
+        self.ball_in_hole_sound = pyglet.media.load(
+            os.path.join(assets_dir, "sound", "Ball In Hole.wav"), streaming=False
+        )
+        self.shot_sound = pyglet.media.load(
+            os.path.join(assets_dir, "sound", "Shot.wav"), streaming=False
+        )
 
 
 _assets = None

@@ -64,10 +64,11 @@ class _ContourSegment:
         self.seg_type = seg_type
 
 
-default_collision_type = 0
-ball_collision_type = 1
-sticky_collision_type = 2
-flag_collision_type = 3
+_default_collision_type = 0
+_ball_collision_type = 1
+_sand_collision_type = 2
+_sticky_collision_type = 3
+_flag_collision_type = 4
 
 
 def add_sticky_to_stickies(stickies, sticky):
@@ -152,6 +153,8 @@ class Physics:
         on_shot_start,
         on_shot_end,
         get_is_paused,
+        on_ball_sticky_collision,
+        on_ball_sand_collision,
     ):
         self._game = game
         self._camera = camera
@@ -197,6 +200,8 @@ class Physics:
         self._on_shot_end = on_shot_end
         self._get_is_paused = get_is_paused
         self._did_unbind_events = False
+        self._on_ball_sticky_collision_cb = on_ball_sticky_collision
+        self._on_ball_sand_collision_cb = on_ball_sand_collision
 
         for contour_idx, contour in enumerate([exterior_contour] + contours):
             for i, p1 in enumerate(contour):
@@ -219,6 +224,7 @@ class Physics:
                 shape = pymunk.Segment(self._space.static_body, p1, p2, 0.1)
                 shape.friction = self._sand_friction
                 shape.elasticity = self._sand_elasticity
+                shape.collision_type = _sand_collision_type
                 self._space.add(shape)
                 seg_key = _encode_segment_coords(p1, p2)
                 if seg_key in self._contour_segment_map:
@@ -253,15 +259,19 @@ class Physics:
                 ),
             ],
         )
-        self._flag_collision_shape.collision_type = flag_collision_type
+        self._flag_collision_shape.collision_type = _flag_collision_type
         self._space.add(self._flag_collision_shape)
         self._ball_flag_collision_handler = self._space.add_collision_handler(
-            ball_collision_type, flag_collision_type
+            _ball_collision_type, _flag_collision_type
         )
         ball_sticky_collision_handler = self._space.add_collision_handler(
-            ball_collision_type, sticky_collision_type
+            _ball_collision_type, _sticky_collision_type
         )
         ball_sticky_collision_handler.begin = self._on_ball_sticky_collision
+        ball_sand_collision_handler = self._space.add_collision_handler(
+            _ball_collision_type, _sand_collision_type
+        )
+        ball_sand_collision_handler.begin = self._on_ball_sand_collision
 
         self._bind_events()
 
@@ -277,6 +287,13 @@ class Physics:
         self._space.gravity = (0, 0)
         self._ball_shape.body.velocity = (0, 0)
         self._ball_shape.body.angular_velocity = 0
+        self._on_ball_sticky_collision_cb()
+        return True
+
+    def _on_ball_sand_collision(self, _arb, _space, _data):
+        if self._hole_animation_start_time is not None:
+            return False
+        self._on_ball_sand_collision_cb()
         return True
 
     def _make_ball_shape(self, position):
@@ -287,7 +304,7 @@ class Physics:
         shape = pymunk.Circle(body, self.ball_radius)
         shape.friction = self._friction
         shape.elasticity = self._elasticity
-        shape.collision_type = ball_collision_type
+        shape.collision_type = _ball_collision_type
         return shape
 
     def update(self, dt):
@@ -504,6 +521,11 @@ class Physics:
         return Vec2(position[0], position[1])
 
     @property
+    def ball_velocity(self):
+        velocity = self._ball_shape.body.velocity
+        return Vec2(velocity[0], velocity[1])
+
+    @property
     def is_dragging(self):
         return (
             self._mouse_dragging
@@ -572,7 +594,7 @@ class Physics:
                         for c1, c2 in zip(sticky.wall, sticky.wall[1:]):
                             k = _encode_segment_coords(c1, c2)
                             shape = self._contour_segment_map[k].pymunk_shape
-                            shape.collision_type = sticky_collision_type
+                            shape.collision_type = _sticky_collision_type
                             self._contour_segment_map[k] = _ContourSegment(
                                 shape, _ContourSegmentType.STICKY
                             )

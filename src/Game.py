@@ -3,6 +3,7 @@ import pyglet
 import pyglet.gl
 import glooey
 from widgets import large_window_width, large_window_height
+from assets import assets
 
 
 class MyGui(glooey.Gui):
@@ -32,7 +33,9 @@ class Game:
         self._average_dt = []
         self._resize_handlers = []
         self.size = self._get_size()
-        self.is_sound_enabled = True
+        self._bgm_player = None
+        self.is_sound_enabled = False
+        self.set_is_sound_enabled(True)
         self._screen.bind(self)
 
     def _get_size(self):
@@ -78,6 +81,15 @@ class Game:
         self.gui.batch.draw()
 
     def set_is_sound_enabled(self, is_sound_enabled):
+        if self.is_sound_enabled == is_sound_enabled:
+            return
+        if is_sound_enabled:
+            self._bgm_player = pyglet.media.Player()
+            self._bgm_player.loop = True
+            self._bgm_player.queue(assets().bgm_sound)
+            self._bgm_player.play()
+        else:
+            self._bgm_player.delete()
         self.is_sound_enabled = is_sound_enabled
 
     def on_size_change(self, handler):
