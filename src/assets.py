@@ -5,9 +5,8 @@ import pyglet
 class _Assets:
     def __init__(self):
         src_dir = os.path.dirname(os.path.abspath(__file__))
-        assets_dir = os.path.join(os.path.dirname(src_dir), "assets")
-        self.font_name = "Roboto Condensed"
-        self.pixel_font_name = "Minecraft"
+        assets_dir = os.path.join(src_dir, "assets")
+        self.font_name = "KenVector Future"
         pyglet.font.add_directory(os.path.join(assets_dir, "fonts"))
         self.flag_img = pyglet.image.load(os.path.join(assets_dir, "Flag.png"))
         self.dirt_texture_img = pyglet.image.load(
@@ -35,6 +34,7 @@ class _Assets:
             os.path.join(assets_dir, "Sound On.png")
         )
         self.back_btn_img = pyglet.image.load(os.path.join(assets_dir, "Back.png"))
+        self.help_btn_img = pyglet.image.load(os.path.join(assets_dir, "Help.png"))
         self.btn_small_base_left_img = pyglet.image.load(
             os.path.join(assets_dir, "button", "small", "base_left.png")
         )

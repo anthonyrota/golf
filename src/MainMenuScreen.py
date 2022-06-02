@@ -1,22 +1,18 @@
 import glooey
 from GameScreen import GameScreen
 import PlayOptionsScreen
-from widgets import Button, ToggleSoundButton, ButtonStack
+import HelpScreen
+from widgets import Button, TopLeftHBox, ToggleSoundButton, ButtonStack, HelpButton
 from assets import assets
 from StaticBlurredBackground import StaticBlurredBackground
 from gl_util import clear_gl
-
-
-class ToggleSoundButtonTopLeft(ToggleSoundButton):
-    custom_alignment = "top left"
-    custom_padding = 24
 
 
 class MainMenuScreen(GameScreen):
     def __init__(self, blurred_background_img=None):
         self._game = None
         self._vbox = None
-        self._sound_btn = None
+        self._icons_hbox = None
         self._blurred_background_img = blurred_background_img
         self._blurred_background = None
 
@@ -25,6 +21,9 @@ class MainMenuScreen(GameScreen):
             self._game.set_screen(
                 PlayOptionsScreen.PlayOptionsScreen(self._blurred_background_img)
             )
+
+        def on_help_btn_click(_widget):
+            self._game.set_screen(HelpScreen.HelpScreen(self._blurred_background_img))
 
         def on_quit_btn_click(_widget):
             self._game.quit()
@@ -46,16 +45,21 @@ class MainMenuScreen(GameScreen):
         quit_btn.push_handlers(on_click=on_quit_btn_click)
         quit_btn.set_size(self._game.size)
         btn_stack.add(quit_btn)
-        self._sound_btn = ToggleSoundButtonTopLeft(self._game)
+        self._icons_hbox = TopLeftHBox()
+        self._icons_hbox.set_size(self._game.size)
+        self._icons_hbox.add(ToggleSoundButton(self._game))
+        help_btn = HelpButton(self._game)
+        help_btn.push_handlers(on_click=on_help_btn_click)
+        self._icons_hbox.add(help_btn)
         self._game.gui.add(self._vbox)
-        self._game.gui.add(self._sound_btn)
+        self._game.gui.add(self._icons_hbox)
         self._game.on_size_change(self._on_size_change)
 
     def _remove_gui(self):
         self._game.gui.remove(self._vbox)
-        self._game.gui.remove(self._sound_btn)
+        self._game.gui.remove(self._icons_hbox)
         self._vbox = None
-        self._sound_btn = None
+        self._icons_hbox = None
         self._game.off_size_change(self._on_size_change)
 
     def _on_size_change(self):

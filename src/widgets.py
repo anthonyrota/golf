@@ -9,7 +9,7 @@ large_window_width = 750
 class Label(glooey.Label):
     custom_size = "small"
     custom_color = "#aaaaaa"
-    custom_font_name = "KenVector Future"
+    custom_font_name = assets().font_name
     custom_small_font_size = 14
     custom_large_font_size = 20
 
@@ -155,6 +155,11 @@ class ToggleSoundButton(glooey.Checkbox):
 class BackButton(IconButton):
     class Background(glooey.Background):
         custom_image = assets().back_btn_img
+
+
+class HelpButton(IconButton):
+    class Background(glooey.Background):
+        custom_image = assets().help_btn_img
 
 
 class TopLeftHBox(glooey.HBox):

@@ -12,6 +12,7 @@ from collision import (
 from Rectangle import Rectangle
 
 
+# Marching squares algorithm
 def make_cave_contours(grid, width, height):
     edges = {}
 
@@ -98,6 +99,7 @@ def make_cave_contours(grid, width, height):
     return polygons
 
 
+# Sign indicates cw/ccw
 def _get_signed_area_of_polygon(polygon):
     double_signed_area = 0
     for i, c1 in enumerate(polygon):
@@ -128,6 +130,7 @@ class Flat:
         return Vec2(self.pos.x + self.width / 2, self.pos.y)
 
 
+# Gets all the "ground" parts which are flat
 def _get_flat_grounds(contours):
     flats = []
     for i, contour in enumerate(contours):
@@ -197,6 +200,7 @@ def _min_path_length(grid, start, end):
 
 
 def place_start_flat_and_flag_flat(contours, grid):
+    # Choose start and end positions which are far apart
     flat_grounds = [flat.buffer(-0.25) for flat in _get_flat_grounds(contours)]
 
     def flat_to_grid_coords(flat):
@@ -229,6 +233,10 @@ def make_sand_pits(
     avoid_rects,
     ball_radius,
 ):
+    # First we walk through the contour to identify possible positions for the
+    # sand pits, then we filter these positions (so they don't overlap stuff)
+    # and then randomly select the sand pits.
+
     avoid_polys = [
         ConcavePoly(
             CollisionVector(0, 0), [CollisionVector(v[0], v[1]) for v in inner_contour]
@@ -319,6 +327,7 @@ def make_sand_pits(
     return selected_sand_pits
 
 
+# http://roguebasin.com/?title=Cellular_Automata_Method_for_Generating_Random_Cave-Like_Levels
 def make_cave_grid(
     width,
     height,

@@ -37,6 +37,7 @@ class _PlaceStickyMode:
         self.mouse_pos = mouse_pos
 
 
+# The player can place stickies on the contour to which the ball will stick to
 class Sticky:
     def __init__(self, wall, contour, is_exterior, is_preview):
         self.wall = wall
@@ -104,7 +105,7 @@ def do_circle_and_line_segment_intersect(
     vx = line_segment_c1[0] - circle_pos[0]
     vy = line_segment_c1[1] - circle_pos[1]
     if (
-        vx ** 2 + vy ** 2 <= circle_radius
+        vx**2 + vy**2 <= circle_radius
         or (line_segment_c1[0] - circle_pos[0]) ** 2
         + (line_segment_c1[1] - circle_pos[1]) ** 2
         <= circle_radius
@@ -113,13 +114,13 @@ def do_circle_and_line_segment_intersect(
         return True
     dx = line_segment_c2[0] - line_segment_c1[0]
     dy = line_segment_c2[1] - line_segment_c1[1]
-    if not 0 <= dx * vx + dy * vy <= dx ** 2 + dy ** 2:
+    if not 0 <= dx * vx + dy * vy <= dx**2 + dy**2:
         # Circle does not lie between the endpoints
         return False
     a = dy
     b = -dx
     c = dx * line_segment_c2[1] - dy * line_segment_c2[0]
-    d = abs(a * circle_pos[0] + b * circle_pos[1] + c) / math.sqrt(a ** 2 + b ** 2)
+    d = abs(a * circle_pos[0] + b * circle_pos[1] + c) / math.sqrt(a**2 + b**2)
     # Intersects somewhere in the middle of the segment
     return d <= circle_radius
 
@@ -335,7 +336,7 @@ class Physics:
                 ) / self._hole_animation_to_in_hole_duration
                 self._ball_shape.body.velocity = Vec2(0, -1)
                 self._ball_shape.body.position = self._flag_position + Vec2(
-                    0, self.ball_radius - 1.2 * self.ball_radius * (t ** 2)
+                    0, self.ball_radius - 1.2 * self.ball_radius * (t**2)
                 )
                 self._update_ball_trail()
             else:
@@ -390,7 +391,7 @@ class Physics:
         vel = (self._mouse_dragging.start - self._mouse_dragging.current).scale(
             self._shot_sensitivity
         )
-        if vel.dot(vel) > self._max_power ** 2:
+        if vel.dot(vel) > self._max_power**2:
             return vel.normalize().scale(self._max_power)
         return vel
 
@@ -400,7 +401,7 @@ class Physics:
     def get_drag_current(self):
         delta = self._mouse_dragging.current - self._mouse_dragging.start
         max_mag = self._max_power / self._shot_sensitivity
-        if delta.dot(delta) > max_mag ** 2:
+        if delta.dot(delta) > max_mag**2:
             return self._mouse_dragging.start + delta.normalize().scale(max_mag)
         return self._mouse_dragging.current
 

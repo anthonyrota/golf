@@ -506,8 +506,8 @@ class PlayScreen(GameScreen):
             or self._level_complete
             and is_on_last_hole(self._game_state)
         ):
-            self._fboA.resize(self._game.window.width, self._game.window.height)
-            self._fboB.resize(self._game.window.width, self._game.window.height)
+            self._fboA.resize(self._game.window.width * 2, self._game.window.height * 2)
+            self._fboB.resize(self._game.window.width * 2, self._game.window.height * 2)
             self._geometry.render(
                 camera=self._camera,
                 physics=self._physics,
@@ -531,7 +531,7 @@ class PlayScreen(GameScreen):
                 t = min((time() - self._game_done_time) / fade_anim_duration, 1)
             T = 1 - (1 - t) ** 2
             for i in range(iterations):
-                radius = (iterations - i) * T / 4
+                radius = (iterations - i) * T / 2
                 gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, write_fb.fbo)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, read_fb.tex)
                 blurred_background_shader.uniforms.u_direction = (
